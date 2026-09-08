@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Cerberus Lookup",
+        "description": "Rilevato in questo momento: {detected}.\n\nLa rete da cui stai uscendo e' gia' nella tabella qui sotto, senza nome. Apri il link per vedere a chi appartiene, poi scrivi il nome che vuoi leggere nel sensore:\n\n`35612 = Eolo`\n\nUn provider per riga. Non devi aggiungerli tutti adesso: ogni volta che il sensore mostra l'etichetta di provider ignoto, riapri questo dialogo e trovi qui la rete in uso, pronta da nominare.",
+        "data": {
+          "provider_table": "Provider",
+          "disconnected_label": "Etichetta quando non si esce",
+          "unknown_label": "Etichetta quando il provider non e' in tabella"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cerberus Lookup",
+        "description": "Rilevato in questo momento: {detected}.\n\nSe la rete in uso non era ancora mappata, e' stata aggiunta in fondo alla tabella senza nome. Apri il link per vedere a chi appartiene, poi scrivi il nome che vuoi leggere nel sensore:\n\n`35612 = Eolo`\n\nUn provider per riga. Le righe illeggibili vengono ignorate, quindi un errore di battitura costa un provider e mai un dialogo che si rifiuta di chiudersi.",
+        "data": {
+          "provider_table": "Provider",
+          "disconnected_label": "Etichetta quando non si esce",
+          "unknown_label": "Etichetta quando il provider non e' in tabella"
+        }
+      }
+    }
+  }
+}

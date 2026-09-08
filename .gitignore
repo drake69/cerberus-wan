@@ -1,0 +1,18 @@
+# Secrets and agent internals must never reach the remote
+.env
+.env.*
+!.env.example
+.coding_agent/
+.sestante/
+*.token
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
+.code_reader/

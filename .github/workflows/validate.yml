@@ -1,0 +1,33 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Weekly, so a breaking change in the Home Assistant manifest rules or in
+    # HACS surfaces on its own instead of at the next release.
+    - cron: "37 5 * * 1"
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --all-extras --dev
+      - run: uv run pytest -q
+      - run: uv run ruff check .
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration
