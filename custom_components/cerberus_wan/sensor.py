@@ -18,16 +18,9 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import slugify
 
-from . import (
-    CONF_DISCONNECTED_LABEL,
-    CONF_PROVIDERS,
-    CONF_UNKNOWN_LABEL,
-    DEFAULT_DISCONNECTED_LABEL,
-    DEFAULT_UNKNOWN_LABEL,
-    DOMAIN,
-)
-from .dns_lookup import resolve_announcing_asn, resolve_public_address
-from .provider_table import resolve_label
+from . import DOMAIN
+from .assembly import build_monitor
+from .domain import Observation, WanMonitor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,57 +34,40 @@ ACTIVE = 100
 INACTIVE = 0
 
 
-class NetworkCoordinator(DataUpdateCoordinator):
-    """Resolves the network once per cycle, for every entity of the entry."""
+class NetworkCoordinator(DataUpdateCoordinator[Observation]):
+    """Runs the monitor once per cycle, for every entity of the entry.
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    The polling loop belongs to Home Assistant, the question being asked
+    belongs to the monitor. This class is the seam between the two and holds
+    no rule of its own.
+    """
+
+    def __init__(self, hass: HomeAssistant, monitor: WanMonitor) -> None:
         """Prepare the shared polling loop.
 
         Args:
             hass: the running Home Assistant instance.
-            entry: the config entry holding the provider table and labels.
+            monitor: the domain service that answers the question.
         """
-        super().__init__(
-            hass, _LOGGER, name=DOMAIN, update_interval=SCAN_INTERVAL
-        )
-        self._entry = entry
+        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=SCAN_INTERVAL)
+        self._monitor = monitor
 
-    def setting(self, key: str, default):
-        """Read a setting, letting the options dialog override the setup value.
-
-        Args:
-            key: the configuration key to read.
-            default: value returned when the key was never set.
+    @property
+    def monitor(self) -> WanMonitor:
+        """Return the monitor behind this loop.
 
         Returns:
-            The effective value for this entry.
+            The monitor given at construction.
         """
-        return self._entry.options.get(key, self._entry.data.get(key, default))
+        return self._monitor
 
-    async def _async_update_data(self) -> dict:
-        """Resolve the address, the network, and the label they map to.
+    async def _async_update_data(self) -> Observation:
+        """Ask the monitor what is carrying the traffic.
 
         Returns:
-            A mapping with the public address, the autonomous system number
-            and the label every entity of this entry should agree on.
+            The reading every entity of this entry should agree on.
         """
-        address = await self.hass.async_add_executor_job(resolve_public_address)
-        if address is None:
-            return {
-                "address": None,
-                "asn": None,
-                "label": self.setting(
-                    CONF_DISCONNECTED_LABEL, DEFAULT_DISCONNECTED_LABEL
-                ),
-            }
-
-        asn = await self.hass.async_add_executor_job(resolve_announcing_asn, address)
-        label = resolve_label(
-            self.setting(CONF_PROVIDERS, {}),
-            asn,
-            self.setting(CONF_UNKNOWN_LABEL, DEFAULT_UNKNOWN_LABEL),
-        )
-        return {"address": address, "asn": asn, "label": label}
+        return await self._monitor.observe()
 
 
 async def async_setup_entry(
@@ -106,17 +82,14 @@ async def async_setup_entry(
         entry: the config entry holding the provider table.
         async_add_entities: callback used to register the entities.
     """
-    coordinator = NetworkCoordinator(hass, entry)
+    monitor = build_monitor(hass, entry)
+    coordinator = NetworkCoordinator(hass, monitor)
     await coordinator.async_config_entry_first_refresh()
 
-    labels = list(dict.fromkeys(coordinator.setting(CONF_PROVIDERS, {}).values()))
-    labels.append(
-        coordinator.setting(CONF_DISCONNECTED_LABEL, DEFAULT_DISCONNECTED_LABEL)
-    )
-    labels.append(coordinator.setting(CONF_UNKNOWN_LABEL, DEFAULT_UNKNOWN_LABEL))
-
     entities: list[SensorEntity] = [ProviderSensor(coordinator, entry)]
-    entities += [ShareSensor(coordinator, entry, label) for label in labels]
+    entities += [
+        ShareSensor(coordinator, entry, label) for label in monitor.settings.labels
+    ]
     async_add_entities(entities)
 
 
@@ -138,6 +111,15 @@ class CerberusEntity(CoordinatorEntity[NetworkCoordinator], SensorEntity):
             "name": entry.title,
             "entry_type": "service",
         }
+
+    @property
+    def observation(self) -> Observation:
+        """Return the reading every entity of this entry is showing.
+
+        Returns:
+            The latest observation.
+        """
+        return self.coordinator.data
 
 
 class ProviderSensor(CerberusEntity):
@@ -163,7 +145,7 @@ class ProviderSensor(CerberusEntity):
         Returns:
             The provider label, or the disconnected or unknown label.
         """
-        return self.coordinator.data["label"]
+        return self.observation.label
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -172,9 +154,10 @@ class ProviderSensor(CerberusEntity):
         Returns:
             The public address and the announcing autonomous system number.
         """
+        asn = self.observation.asn
         return {
-            "public_address": self.coordinator.data["address"],
-            "asn": self.coordinator.data["asn"],
+            "public_address": self.observation.address,
+            "asn": asn.number if asn else None,
         }
 
 
@@ -208,4 +191,4 @@ class ShareSensor(CerberusEntity):
             The instantaneous share, whose long term mean is the percentage of
             time spent on this provider.
         """
-        return ACTIVE if self.coordinator.data["label"] == self._label else INACTIVE
+        return ACTIVE if self.observation.label == self._label else INACTIVE

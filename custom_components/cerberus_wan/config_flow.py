@@ -6,7 +6,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
 from . import (
@@ -17,50 +17,18 @@ from . import (
     DEFAULT_UNKNOWN_LABEL,
     DOMAIN,
 )
-from .dns_lookup import resolve_announcing_asn, resolve_public_address
-from .provider_table import parse_provider_table, suggest_table
+from .assembly import detect_network, monitor_settings
+from .domain import Asn, ProviderTable
 
 CONF_PROVIDER_TABLE = "provider_table"
 
-# Shorter than the sensor timeout: this runs while the dialog is opening, and a
-# slow lookup would look like a frozen form. Failing to detect is harmless, the
-# form simply opens without a suggestion.
-DETECTION_TIMEOUT = 2.0
 
-
-async def detect_current_asn(hass: HomeAssistant) -> tuple[str | None, int | None]:
-    """Resolve the address and the network in use, to prefill the form.
-
-    Args:
-        hass: the running Home Assistant instance.
-
-    Returns:
-        The public address and the announcing autonomous system number, either
-        of which is None when it could not be determined.
-    """
-    address = await hass.async_add_executor_job(resolve_public_address, DETECTION_TIMEOUT)
-    if address is None:
-        return None, None
-    asn = await hass.async_add_executor_job(
-        resolve_announcing_asn, address, DETECTION_TIMEOUT
-    )
-    return address, asn
-
-
-# Hurricane Electric renders an autonomous system number as the name of the
-# organisation behind it. The link is offered to the person reading the dialog,
-# never fetched by this integration: if the site disappears the only loss is a
-# convenience, not a feature. This keeps the "no third party service" rule
-# intact, which is about runtime dependencies and not about hyperlinks.
-ASN_DIRECTORY_URL = "https://bgp.he.net/AS{asn}"
-
-
-def describe_detection(address: str | None, asn: int | None) -> str:
+def describe_detection(address: str | None, asn: Asn | None) -> str:
     """Render the detected line for the dialog description, as markdown.
 
     Args:
         address: the public address, or None.
-        asn: the announcing autonomous system number, or None.
+        asn: the announcing network, or None.
 
     Returns:
         A short summary of what was detected, with a link that names the
@@ -68,8 +36,7 @@ def describe_detection(address: str | None, asn: int | None) -> str:
     """
     if asn is None:
         return "nothing (fill the table by hand, or reopen this dialog later)"
-    link = ASN_DIRECTORY_URL.format(asn=asn)
-    return f"AS{asn} ([who is this?]({link})), public address {address}"
+    return f"AS{asn} ([who is this?]({asn.directory_url})), public address {address}"
 
 
 def build_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -109,8 +76,9 @@ def to_entry_payload(user_input: dict[str, Any]) -> dict[str, Any]:
     Returns:
         The payload with the provider text already parsed into a mapping.
     """
+    table = ProviderTable.parse(user_input.get(CONF_PROVIDER_TABLE, ""))
     return {
-        CONF_PROVIDERS: parse_provider_table(user_input.get(CONF_PROVIDER_TABLE, "")),
+        CONF_PROVIDERS: table.as_mapping(),
         CONF_DISCONNECTED_LABEL: user_input.get(
             CONF_DISCONNECTED_LABEL, DEFAULT_DISCONNECTED_LABEL
         ),
@@ -139,10 +107,12 @@ class CerberusWanConfigFlow(ConfigFlow, domain=DOMAIN):
                 title="Cerberus WAN", data=to_entry_payload(user_input)
             )
 
-        address, asn = await detect_current_asn(self.hass)
+        address, asn = await detect_network(self.hass)
         return self.async_show_form(
             step_id="user",
-            data_schema=build_schema({CONF_PROVIDER_TABLE: suggest_table({}, asn)}),
+            data_schema=build_schema(
+                {CONF_PROVIDER_TABLE: ProviderTable().suggestion(asn)}
+            ),
             description_placeholders={"detected": describe_detection(address, asn)},
         )
 
@@ -177,21 +147,15 @@ class CerberusWanOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=to_entry_payload(user_input))
 
-        current = {**self.config_entry.data, **self.config_entry.options}
-        address, asn = await detect_current_asn(self.hass)
+        settings = monitor_settings(self.config_entry)
+        address, asn = await detect_network(self.hass)
         return self.async_show_form(
             step_id="init",
             data_schema=build_schema(
                 {
-                    CONF_PROVIDER_TABLE: suggest_table(
-                        current.get(CONF_PROVIDERS, {}), asn
-                    ),
-                    CONF_DISCONNECTED_LABEL: current.get(
-                        CONF_DISCONNECTED_LABEL, DEFAULT_DISCONNECTED_LABEL
-                    ),
-                    CONF_UNKNOWN_LABEL: current.get(
-                        CONF_UNKNOWN_LABEL, DEFAULT_UNKNOWN_LABEL
-                    ),
+                    CONF_PROVIDER_TABLE: settings.table.suggestion(asn),
+                    CONF_DISCONNECTED_LABEL: settings.disconnected_label,
+                    CONF_UNKNOWN_LABEL: settings.unknown_label,
                 }
             ),
             description_placeholders={"detected": describe_detection(address, asn)},

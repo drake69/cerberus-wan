@@ -77,8 +77,20 @@ uv run pytest
 uv run ruff check .
 ```
 
-The modules holding the logic, `dns_lookup.py` and `provider_table.py`, do not
-import Home Assistant, so the test suite runs without it.
+### Layout
+
+```
+domain/          the model: Asn, ProviderTable, Observation, WanMonitor, ports
+infrastructure/  the adapters: DNS lookups, the system clock
+assembly.py      the composition root: entry in, wired monitor out
+sensor.py        Home Assistant entities, thin
+config_flow.py   Home Assistant dialogs, thin
+```
+
+Nothing under `domain/` imports Home Assistant or a DNS library: it reaches the
+outside world only through the protocols in `domain/ports.py`. That is why the
+test suite runs the whole model against fakes, with no network and no Home
+Assistant installed.
 
 ## Licence
 
