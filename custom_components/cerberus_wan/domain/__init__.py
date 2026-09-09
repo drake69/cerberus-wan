@@ -11,7 +11,7 @@ from .asn_cache import AsnCache, CacheEntry
 from .change_window import ChangeWindow
 from .monitor import MonitorSettings, WanMonitor
 from .observation import Observation
-from .ports import AddressProbe, AsnRegistry, CacheStore, Clock
+from .ports import AddressProbe, AsnRegistry, CacheStore, ChangeListener, Clock
 from .provider_table import ProviderTable
 
 __all__ = [
@@ -21,6 +21,7 @@ __all__ = [
     "AsnRegistry",
     "CacheEntry",
     "CacheStore",
+    "ChangeListener",
     "ChangeWindow",
     "Clock",
     "MonitorSettings",

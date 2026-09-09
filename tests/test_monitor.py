@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from domain import MonitorSettings, ProviderTable, WanMonitor
 from domain.asn_cache import REFRESH
-from fakes import FakeProbe, FakeRegistry, FakeStore, FrozenClock
+from fakes import FakeListener, FakeProbe, FakeRegistry, FakeStore, FrozenClock
 
 MOMENT = datetime(2026, 9, 9, 12, 0, tzinfo=UTC)
 
@@ -20,6 +20,7 @@ class Rig:
     registry: FakeRegistry
     clock: FrozenClock
     store: FakeStore
+    listener: FakeListener
 
     def observe(self):
         """Run one observation.
@@ -46,6 +47,7 @@ def build(address, known=None, table=None, stored=None) -> Rig:
     registry = FakeRegistry(known)
     clock = FrozenClock(MOMENT)
     store = FakeStore(stored)
+    listener = FakeListener()
     monitor = WanMonitor(
         probe=probe,
         registry=registry,
@@ -56,8 +58,9 @@ def build(address, known=None, table=None, stored=None) -> Rig:
             unknown_label="Unknown",
         ),
         store=store,
+        listener=listener,
     )
-    return Rig(monitor, probe, registry, clock, store)
+    return Rig(monitor, probe, registry, clock, store, listener)
 
 
 def test_reports_the_configured_label_for_a_known_network() -> None:
@@ -210,3 +213,28 @@ def test_losing_the_line_is_a_change_like_any_other() -> None:
     rig.observe()
     assert rig.monitor.changes_last_day == 1
     assert rig.monitor.current.label == "Disconnected"
+
+
+def test_the_listener_hears_a_switchover() -> None:
+    """This is what starts whatever the entry hooked to the change."""
+    table = ProviderTable({"35612": "Eolo", "51207": "Iliad"})
+    rig = build("1.2.3.4", {"1.2.3.4": 35612, "5.6.7.8": 51207}, table)
+    rig.observe()
+    rig.probe.address = "5.6.7.8"
+    rig.observe()
+    assert rig.listener.heard == [("Eolo", "Iliad")]
+
+
+def test_the_listener_is_not_told_about_the_first_reading() -> None:
+    """Starting Home Assistant must not fire everybody's automations."""
+    rig = build("1.2.3.4", {"1.2.3.4": 35612})
+    rig.observe()
+    assert rig.listener.heard == []
+
+
+def test_the_listener_is_not_told_when_nothing_moved() -> None:
+    """Four identical readings a minute are not four switchovers."""
+    rig = build("1.2.3.4", {"1.2.3.4": 35612}, ProviderTable({"35612": "Eolo"}))
+    for _ in range(4):
+        rig.observe()
+    assert rig.listener.heard == []

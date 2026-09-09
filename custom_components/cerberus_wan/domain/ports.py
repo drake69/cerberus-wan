@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Protocol
 
 from .asn import Asn
+from .observation import Observation
 
 
 class AddressProbe(Protocol):
@@ -55,6 +56,20 @@ class CacheStore(Protocol):
 
         Args:
             payload: the table to store.
+        """
+
+
+class ChangeListener(Protocol):
+    """Told when the provider changes, and free to do anything with it."""
+
+    async def provider_changed(
+        self, previous: Observation, current: Observation
+    ) -> None:
+        """React to a switchover.
+
+        Args:
+            previous: the reading before the change.
+            current: the reading that is the change.
         """
 
 

@@ -7,8 +7,6 @@ neither the entities nor the dialogs have to know what a DNS resolver is.
 
 from __future__ import annotations
 
-from typing import Any
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
@@ -20,7 +18,9 @@ from . import (
     DEFAULT_DISCONNECTED_LABEL,
     DEFAULT_UNKNOWN_LABEL,
     DOMAIN,
+    setting,
 )
+from .announcer import HassAnnouncer
 from .domain import Asn, MonitorSettings, ProviderTable, WanMonitor
 from .infrastructure.clock import SystemClock
 from .infrastructure.dns import CymruAsnRegistry, DnsAddressProbe
@@ -35,20 +35,6 @@ DETECTION_TIMEOUT = 2.0
 # address is a fact about the address, not about whoever is watching it.
 STORAGE_KEY = f"{DOMAIN}.asn_cache"
 STORAGE_VERSION = 1
-
-
-def setting(entry: ConfigEntry, key: str, default: Any) -> Any:
-    """Read a setting, letting the options dialog override the setup value.
-
-    Args:
-        entry: the config entry to read from.
-        key: the configuration key to read.
-        default: value returned when the key was never set.
-
-    Returns:
-        The effective value for this entry.
-    """
-    return entry.options.get(key, entry.data.get(key, default))
 
 
 def monitor_settings(entry: ConfigEntry) -> MonitorSettings:
@@ -77,7 +63,8 @@ def build_monitor(hass: HomeAssistant, entry: ConfigEntry) -> WanMonitor:
         entry: the config entry being set up.
 
     Returns:
-        A monitor wired to DNS and to the machine clock.
+        A monitor wired to DNS, to the machine clock, and to Home Assistant for
+        the moment the provider changes.
     """
     return WanMonitor(
         probe=DnsAddressProbe(hass.async_add_executor_job),
@@ -85,6 +72,7 @@ def build_monitor(hass: HomeAssistant, entry: ConfigEntry) -> WanMonitor:
         clock=SystemClock(),
         settings=monitor_settings(entry),
         store=DelayedCacheStore(Store(hass, STORAGE_VERSION, STORAGE_KEY)),
+        listener=HassAnnouncer(hass, entry),
     )
 
 

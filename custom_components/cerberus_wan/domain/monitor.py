@@ -8,7 +8,7 @@ from .asn import Asn
 from .asn_cache import AsnCache
 from .change_window import ChangeWindow
 from .observation import Observation
-from .ports import AddressProbe, AsnRegistry, CacheStore, Clock
+from .ports import AddressProbe, AsnRegistry, CacheStore, ChangeListener, Clock
 from .provider_table import ProviderTable
 
 
@@ -53,6 +53,7 @@ class WanMonitor:
         clock: Clock,
         settings: MonitorSettings,
         store: CacheStore | None = None,
+        listener: ChangeListener | None = None,
     ) -> None:
         """Wire the monitor to its surroundings.
 
@@ -63,12 +64,14 @@ class WanMonitor:
             settings: the provider table and the labels to fall back on.
             store: where the table of known addresses survives a restart, or
                 None to keep it in memory for the life of the process.
+            listener: who to tell when the provider changes, if anybody.
         """
         self._probe = probe
         self._registry = registry
         self._clock = clock
         self._settings = settings
         self._store = store
+        self._listener = listener
         self._cache = AsnCache()
         self._window = ChangeWindow()
         self._current: Observation | None = None
@@ -151,38 +154,40 @@ class WanMonitor:
     async def observe(self) -> Observation:
         """Look at the network once and report what was seen.
 
-        A reading that differs from the one before it is a switchover, and
-        is noted in the window on the way out.
+        A reading that differs from the one before it is a switchover: it is
+        noted in the window, and whoever asked to be told is told.
 
         Returns:
             The reading: the address, the announcing network, and the label
             the two of them resolve to.
         """
+        return await self._settle(await self._read())
+
+    async def _read(self) -> Observation:
+        """Resolve the network as it is right now.
+
+        Returns:
+            The reading, with no side effect on the record.
+        """
         address = await self._probe.public_address()
         if address is None:
-            return self._record(
-                Observation(
-                    moment=self._clock.now(),
-                    address=None,
-                    asn=None,
-                    label=self._settings.disconnected_label,
-                )
+            return Observation(
+                moment=self._clock.now(),
+                address=None,
+                asn=None,
+                label=self._settings.disconnected_label,
             )
 
         asn = await self._asn_for(address)
-        return self._record(
-            Observation(
-                moment=self._clock.now(),
-                address=address,
-                asn=asn,
-                label=self._settings.table.label_for(
-                    asn, self._settings.unknown_label
-                ),
-            )
+        return Observation(
+            moment=self._clock.now(),
+            address=address,
+            asn=asn,
+            label=self._settings.table.label_for(asn, self._settings.unknown_label),
         )
 
-    def _record(self, observation: Observation) -> Observation:
-        """Keep the reading, and note it in the window when it is a change.
+    async def _settle(self, observation: Observation) -> Observation:
+        """Keep the reading, and act on it when it is a change.
 
         Args:
             observation: the reading just taken.
@@ -190,9 +195,14 @@ class WanMonitor:
         Returns:
             The same reading, so the caller can return it.
         """
-        if observation.follows(self._current):
-            self._window.record(observation.moment)
+        previous = self._current
         self._current = observation
+        if not observation.follows(previous):
+            return observation
+
+        self._window.record(observation.moment)
+        if self._listener is not None:
+            await self._listener.provider_changed(previous, observation)
         return observation
 
     async def _asn_for(self, address: str) -> Asn | None:

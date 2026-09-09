@@ -107,3 +107,20 @@ class FakeStore:
         """
         self.payload = payload
         self.writes += 1
+
+
+class FakeListener:
+    """A listener that records the switchovers it was told about."""
+
+    def __init__(self) -> None:
+        """Start with nothing heard."""
+        self.heard: list[tuple[str, str]] = []
+
+    async def provider_changed(self, previous, current) -> None:
+        """Record a switchover.
+
+        Args:
+            previous: the reading before the change.
+            current: the reading that is the change.
+        """
+        self.heard.append((previous.label, current.label))

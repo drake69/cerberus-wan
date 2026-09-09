@@ -36,6 +36,32 @@ Assistant does is a statistic that lies.
 
 Losing the line counts as a change, because it is one.
 
+## Reacting to a change
+
+Two ways, and you can use either or both.
+
+**Pick an automation or a script in the dialog.** The field accepts both, and
+several of each. An automation is triggered with its own conditions still in
+force, so one that says "only at night" still means it. A script receives what
+changed as variables.
+
+**Or trigger on the event.** Every switchover fires
+`cerberus_wan_provider_changed`, whether or not anything was hooked to it:
+
+```yaml
+trigger:
+  - platform: event
+    event_type: cerberus_wan_provider_changed
+action:
+  - service: notify.mobile_app
+    data:
+      message: "Now on {{ trigger.event.data.label }}, was {{ trigger.event.data.previous_label }}"
+```
+
+The event carries `previous_label`, `label`, `public_address`, `asn`,
+`changed_at` and `entry_id`. Use it when the automation needs to know where the
+traffic went; use the field when it just needs to run.
+
 ## How it works
 
 Two DNS queries, asked at very different rates:
