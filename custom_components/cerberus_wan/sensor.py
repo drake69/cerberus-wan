@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
 
 from homeassistant.components.sensor import (
@@ -10,8 +11,10 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
@@ -20,7 +23,7 @@ from homeassistant.util import slugify
 
 from . import DOMAIN
 from .assembly import build_monitor
-from .domain import Observation, WanMonitor
+from .domain import ChangeWindow, Observation, WanMonitor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +39,11 @@ SCAN_INTERVAL = timedelta(seconds=15)
 # plain text sensor cannot answer.
 ACTIVE = 100
 INACTIVE = 0
+
+# The window has to be swept often enough for a change to leave it on time,
+# and no more often than that: sweeping it hourly is what makes the statistics
+# a rolling day rather than a total that only ever grows.
+STATISTICS_INTERVAL = timedelta(hours=1)
 
 
 class NetworkCoordinator(DataUpdateCoordinator[Observation]):
@@ -73,6 +81,17 @@ class NetworkCoordinator(DataUpdateCoordinator[Observation]):
         """
         return await self._monitor.observe()
 
+    @callback
+    def async_expire_statistics(self, now=None) -> None:
+        """Let the oldest changes leave the window, and republish if they did.
+
+        Args:
+            now: the moment the timer fired, which the monitor does not need
+                because it carries its own clock.
+        """
+        if self._monitor.expire_changes():
+            self.async_update_listeners()
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -91,11 +110,21 @@ async def async_setup_entry(
     coordinator = NetworkCoordinator(hass, monitor)
     await coordinator.async_config_entry_first_refresh()
 
-    entities: list[SensorEntity] = [ProviderSensor(coordinator, entry)]
+    entities: list[SensorEntity] = [
+        ProviderSensor(coordinator, entry),
+        ChangeCountSensor(coordinator, entry),
+        ChangeRateSensor(coordinator, entry),
+    ]
     entities += [
         ShareSensor(coordinator, entry, label) for label in monitor.settings.labels
     ]
     async_add_entities(entities)
+
+    entry.async_on_unload(
+        async_track_time_interval(
+            hass, coordinator.async_expire_statistics, STATISTICS_INTERVAL
+        )
+    )
 
 
 class CerberusEntity(CoordinatorEntity[NetworkCoordinator], SensorEntity):
@@ -197,3 +226,153 @@ class ShareSensor(CerberusEntity):
             time spent on this provider.
         """
         return ACTIVE if self.observation.label == self._label else INACTIVE
+
+
+class StatisticEntity(CerberusEntity):
+    """A number about the changes, published only when it actually moves.
+
+    The polling loop runs every fifteen seconds, and the count of the last day
+    is the same number on almost all of them. Writing it anyway would be five
+    thousand state writes a day that say nothing.
+    """
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: NetworkCoordinator, entry: ConfigEntry) -> None:
+        """Remember nothing has been published yet.
+
+        Args:
+            coordinator: the shared polling loop.
+            entry: the config entry this entity belongs to.
+        """
+        super().__init__(coordinator, entry)
+        self._published = None
+
+    @property
+    def monitor(self) -> WanMonitor:
+        """Return the monitor holding the window.
+
+        Returns:
+            The monitor behind the coordinator.
+        """
+        return self.coordinator.monitor
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Write the state only when the number reported has changed."""
+        value = self.native_value
+        if value == self._published:
+            return
+        self._published = value
+        super()._handle_coordinator_update()
+
+
+@dataclass
+class StoredWindow(ExtraStoredData):
+    """The window as it survives a restart."""
+
+    moments: list[str]
+
+    def as_dict(self) -> dict:
+        """Return what goes into the restore store.
+
+        Returns:
+            The moments, as ISO 8601 strings.
+        """
+        return {"moments": self.moments}
+
+
+class ChangeCountSensor(StatisticEntity, RestoreEntity):
+    """How many times the provider changed in the last twenty four hours."""
+
+    _attr_name = "Changes in 24 hours"
+    _attr_native_unit_of_measurement = "changes"
+    _attr_icon = "mdi:swap-horizontal"
+
+    def __init__(self, coordinator: NetworkCoordinator, entry: ConfigEntry) -> None:
+        """Name the entity after what it counts.
+
+        Args:
+            coordinator: the shared polling loop.
+            entry: the config entry this entity belongs to.
+        """
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_changes_24h"
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of changes inside the window.
+
+        Returns:
+            The count over the last twenty four hours.
+        """
+        return self.monitor.changes_last_day
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return what the count alone does not say.
+
+        Returns:
+            When the provider last changed, and how wide the window is.
+        """
+        window = self.monitor.window
+        last = window.last
+        return {
+            "last_change": last.isoformat() if last else None,
+            "window_hours": round(window.window.total_seconds() / 3600),
+        }
+
+    @property
+    def extra_restore_state_data(self) -> StoredWindow:
+        """Return the window to keep across a restart.
+
+        Returns:
+            The moments currently held.
+        """
+        return StoredWindow(self.monitor.window.to_list())
+
+    async def async_added_to_hass(self) -> None:
+        """Take back the window this entity was holding before the restart.
+
+        Without this a restart would empty the last twenty four hours, and a
+        statistic that resets whenever Home Assistant does is a statistic that
+        lies. This entity is the one that persists the window; the rate sensor
+        reads the same one.
+        """
+        await super().async_added_to_hass()
+        stored = await self.async_get_last_extra_data()
+        if stored is None:
+            return
+        self.monitor.window.adopt(
+            ChangeWindow.from_list(stored.as_dict().get("moments"))
+        )
+        self.monitor.expire_changes()
+        self.async_write_ha_state()
+
+
+class ChangeRateSensor(StatisticEntity):
+    """The moving average of changes per hour over the same window."""
+
+    _attr_name = "Changes per hour"
+    _attr_native_unit_of_measurement = "changes/h"
+    _attr_icon = "mdi:chart-line-variant"
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator: NetworkCoordinator, entry: ConfigEntry) -> None:
+        """Name the entity after what it averages.
+
+        Args:
+            coordinator: the shared polling loop.
+            entry: the config entry this entity belongs to.
+        """
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_changes_per_hour"
+
+    @property
+    def native_value(self) -> float:
+        """Return the average number of changes per hour.
+
+        Returns:
+            The count over the window, divided by the width of the window.
+        """
+        return self.monitor.changes_per_hour

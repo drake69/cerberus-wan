@@ -19,6 +19,23 @@ integration cannot tell, and it is deliberately distinct from `Disconnected`.
 
 Both labels are configurable, so you can phrase them in your own language.
 
+## The entities
+
+| Entity | What it holds |
+|---|---|
+| the provider sensor | the label of the network in use, with the address and the ASN as attributes |
+| one share sensor per label | 100 while that provider is the active one, 0 otherwise, so its long term mean is the percentage of time spent on it |
+| `Changes in 24 hours` | how many times the provider changed in the last 24 hours, as a moving window |
+| `Changes per hour` | the same window divided by its width: the moving average of switchovers per hour |
+
+The two statistics are recomputed the moment a change happens, and swept once
+an hour so that a change leaves the window on time. They are written only when
+the number actually moves, so a quiet line costs no state writes at all. The
+window is kept across a restart: a statistic that resets whenever Home
+Assistant does is a statistic that lies.
+
+Losing the line counts as a change, because it is one.
+
 ## How it works
 
 Two DNS queries, asked at very different rates:

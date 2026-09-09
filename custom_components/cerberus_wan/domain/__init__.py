@@ -8,6 +8,7 @@ rules be tested without a running Home Assistant and without a network.
 
 from .asn import Asn
 from .asn_cache import AsnCache, CacheEntry
+from .change_window import ChangeWindow
 from .monitor import MonitorSettings, WanMonitor
 from .observation import Observation
 from .ports import AddressProbe, AsnRegistry, CacheStore, Clock
@@ -20,6 +21,7 @@ __all__ = [
     "AsnRegistry",
     "CacheEntry",
     "CacheStore",
+    "ChangeWindow",
     "Clock",
     "MonitorSettings",
     "Observation",

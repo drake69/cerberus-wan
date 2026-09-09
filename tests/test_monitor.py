@@ -163,3 +163,50 @@ def test_the_table_is_written_only_when_it_learns_something() -> None:
     for _ in range(4):
         rig.observe()
     assert rig.store.writes == 1
+
+
+def test_a_switchover_is_counted_in_the_window() -> None:
+    """The count is what the statistics sensors report."""
+    table = ProviderTable({"35612": "Eolo", "51207": "Iliad"})
+    rig = build("1.2.3.4", {"1.2.3.4": 35612, "5.6.7.8": 51207}, table)
+    rig.observe()
+    rig.probe.address = "5.6.7.8"
+    rig.observe()
+    assert rig.monitor.changes_last_day == 1
+
+
+def test_starting_up_is_not_counted_as_a_switchover() -> None:
+    """Otherwise every restart would invent a change that never happened."""
+    rig = build("1.2.3.4", {"1.2.3.4": 35612})
+    rig.observe()
+    assert rig.monitor.changes_last_day == 0
+
+
+def test_a_line_that_does_not_move_counts_nothing() -> None:
+    """Four observations of the same provider are not four changes."""
+    rig = build("1.2.3.4", {"1.2.3.4": 35612}, ProviderTable({"35612": "Eolo"}))
+    for _ in range(4):
+        rig.observe()
+    assert rig.monitor.changes_last_day == 0
+
+
+def test_a_change_leaves_the_window_after_a_day() -> None:
+    """The statistic is a moving day, not a total."""
+    table = ProviderTable({"35612": "Eolo", "51207": "Iliad"})
+    rig = build("1.2.3.4", {"1.2.3.4": 35612, "5.6.7.8": 51207}, table)
+    rig.observe()
+    rig.probe.address = "5.6.7.8"
+    rig.observe()
+    rig.clock.moment = MOMENT + timedelta(hours=25)
+    assert rig.monitor.expire_changes() is True
+    assert rig.monitor.changes_last_day == 0
+
+
+def test_losing_the_line_is_a_change_like_any_other() -> None:
+    """Falling off the network is exactly what somebody wants counted."""
+    rig = build("1.2.3.4", {"1.2.3.4": 35612}, ProviderTable({"35612": "Eolo"}))
+    rig.observe()
+    rig.probe.address = None
+    rig.observe()
+    assert rig.monitor.changes_last_day == 1
+    assert rig.monitor.current.label == "Disconnected"

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from .asn import Asn
 from .asn_cache import AsnCache
+from .change_window import ChangeWindow
 from .observation import Observation
 from .ports import AddressProbe, AsnRegistry, CacheStore, Clock
 from .provider_table import ProviderTable
@@ -69,6 +70,53 @@ class WanMonitor:
         self._settings = settings
         self._store = store
         self._cache = AsnCache()
+        self._window = ChangeWindow()
+        self._current: Observation | None = None
+
+    @property
+    def current(self) -> Observation | None:
+        """Return the last reading taken.
+
+        Returns:
+            The reading, or None before the first observation.
+        """
+        return self._current
+
+    @property
+    def window(self) -> ChangeWindow:
+        """Return the moving window of switchovers.
+
+        Returns:
+            The window this monitor has been filling.
+        """
+        return self._window
+
+    @property
+    def changes_last_day(self) -> int:
+        """Return how many times the provider changed in the last day.
+
+        Returns:
+            The number of changes inside the window.
+        """
+        return self._window.count(self._clock.now())
+
+    @property
+    def changes_per_hour(self) -> float:
+        """Return the moving average of changes per hour over the window.
+
+        Returns:
+            The changes per hour.
+        """
+        return self._window.per_hour(self._clock.now())
+
+    def expire_changes(self) -> bool:
+        """Drop the changes that have left the window.
+
+        Returns:
+            True when something was dropped, so the caller knows the published
+            statistics are now out of date.
+        """
+        return self._window.expire(self._clock.now())
 
     @property
     def cache(self) -> AsnCache:
@@ -103,26 +151,49 @@ class WanMonitor:
     async def observe(self) -> Observation:
         """Look at the network once and report what was seen.
 
+        A reading that differs from the one before it is a switchover, and
+        is noted in the window on the way out.
+
         Returns:
             The reading: the address, the announcing network, and the label
             the two of them resolve to.
         """
         address = await self._probe.public_address()
         if address is None:
-            return Observation(
-                moment=self._clock.now(),
-                address=None,
-                asn=None,
-                label=self._settings.disconnected_label,
+            return self._record(
+                Observation(
+                    moment=self._clock.now(),
+                    address=None,
+                    asn=None,
+                    label=self._settings.disconnected_label,
+                )
             )
 
         asn = await self._asn_for(address)
-        return Observation(
-            moment=self._clock.now(),
-            address=address,
-            asn=asn,
-            label=self._settings.table.label_for(asn, self._settings.unknown_label),
+        return self._record(
+            Observation(
+                moment=self._clock.now(),
+                address=address,
+                asn=asn,
+                label=self._settings.table.label_for(
+                    asn, self._settings.unknown_label
+                ),
+            )
         )
+
+    def _record(self, observation: Observation) -> Observation:
+        """Keep the reading, and note it in the window when it is a change.
+
+        Args:
+            observation: the reading just taken.
+
+        Returns:
+            The same reading, so the caller can return it.
+        """
+        if observation.follows(self._current):
+            self._window.record(observation.moment)
+        self._current = observation
+        return observation
 
     async def _asn_for(self, address: str) -> Asn | None:
         """Return who announces an address, asking only when it is not known.
