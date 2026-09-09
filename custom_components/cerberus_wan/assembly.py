@@ -11,6 +11,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 
 from . import (
     CONF_DISCONNECTED_LABEL,
@@ -18,15 +19,22 @@ from . import (
     CONF_UNKNOWN_LABEL,
     DEFAULT_DISCONNECTED_LABEL,
     DEFAULT_UNKNOWN_LABEL,
+    DOMAIN,
 )
 from .domain import Asn, MonitorSettings, ProviderTable, WanMonitor
 from .infrastructure.clock import SystemClock
 from .infrastructure.dns import CymruAsnRegistry, DnsAddressProbe
+from .infrastructure.store import DelayedCacheStore
 
 # Shorter than the timeout the sensors run with: the detection happens while
 # the dialog is opening, and a slow lookup would look like a frozen form.
 # Failing to detect is harmless, the form simply opens without a suggestion.
 DETECTION_TIMEOUT = 2.0
+
+# One table for the installation and not one per entry: who announces an
+# address is a fact about the address, not about whoever is watching it.
+STORAGE_KEY = f"{DOMAIN}.asn_cache"
+STORAGE_VERSION = 1
 
 
 def setting(entry: ConfigEntry, key: str, default: Any) -> Any:
@@ -76,6 +84,7 @@ def build_monitor(hass: HomeAssistant, entry: ConfigEntry) -> WanMonitor:
         registry=CymruAsnRegistry(hass.async_add_executor_job),
         clock=SystemClock(),
         settings=monitor_settings(entry),
+        store=DelayedCacheStore(Store(hass, STORAGE_VERSION, STORAGE_KEY)),
     )
 
 

@@ -40,6 +40,24 @@ class AsnRegistry(Protocol):
         """
 
 
+class CacheStore(Protocol):
+    """Keeps the table of known addresses across a restart."""
+
+    async def load(self) -> dict:
+        """Return the stored table.
+
+        Returns:
+            The payload written by the last save, empty when there is none.
+        """
+
+    async def save(self, payload: dict) -> None:
+        """Write the table.
+
+        Args:
+            payload: the table to store.
+        """
+
+
 class Clock(Protocol):
     """Answers what time it is."""
 

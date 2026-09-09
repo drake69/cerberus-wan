@@ -24,7 +24,11 @@ from .domain import Observation, WanMonitor
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(seconds=60)
+# The address is asked for every fifteen seconds because that is the question
+# that detects a switchover, and a switchover noticed a minute late is a
+# switchover noticed too late. It costs one DNS query: who owns the address is
+# answered from the local table, and asked again only when the address changes.
+SCAN_INTERVAL = timedelta(seconds=15)
 
 # A share sensor holds 100 while its label is the active one and 0 otherwise.
 # Recorded as a measurement, its long term mean over any window is therefore
@@ -83,6 +87,7 @@ async def async_setup_entry(
         async_add_entities: callback used to register the entities.
     """
     monitor = build_monitor(hass, entry)
+    await monitor.prime()
     coordinator = NetworkCoordinator(hass, monitor)
     await coordinator.async_config_entry_first_refresh()
 

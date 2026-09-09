@@ -77,3 +77,33 @@ class FrozenClock:
             Whatever the clock was last set to.
         """
         return self.moment
+
+
+class FakeStore:
+    """A store that keeps the table in a dictionary, and counts the writes."""
+
+    def __init__(self, payload: dict | None = None) -> None:
+        """Start from what is supposedly already stored.
+
+        Args:
+            payload: the stored table, or None for a first run.
+        """
+        self.payload = payload or {}
+        self.writes = 0
+
+    async def load(self) -> dict:
+        """Return the stored table.
+
+        Returns:
+            The payload held.
+        """
+        return self.payload
+
+    async def save(self, payload: dict) -> None:
+        """Record the table.
+
+        Args:
+            payload: the table to store.
+        """
+        self.payload = payload
+        self.writes += 1

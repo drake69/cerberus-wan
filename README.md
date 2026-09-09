@@ -21,12 +21,23 @@ Both labels are configurable, so you can phrase them in your own language.
 
 ## How it works
 
-Two DNS queries, once a minute:
+Two DNS queries, asked at very different rates:
 
-1. `myip.opendns.com` asked of the OpenDNS resolvers returns the public address
-   seen from the outside.
-2. The Team Cymru DNS service returns the autonomous system number announcing
-   that address.
+1. Every **15 seconds**, `myip.opendns.com` asked of the OpenDNS resolvers
+   returns the public address seen from the outside. This is the question that
+   detects a switchover, so it is the one asked often.
+2. **Only when that address is one it has not seen before**, the Team Cymru DNS
+   service is asked which autonomous system announces it.
+
+The answer to the second question is kept in a local table, alongside the date
+it was obtained, and reused for **30 days**. An address does not change owner,
+so asking again on every cycle would be four identical questions a minute for
+an answer that holds for months. A lookup that failed is retried within the
+hour instead, so a moment of DNS trouble does not become thirty days of an
+unknown provider.
+
+The table lives in the Home Assistant storage directory and survives a restart.
+Addresses not seen for 60 days are dropped from it.
 
 The number is then looked up in your table.
 
