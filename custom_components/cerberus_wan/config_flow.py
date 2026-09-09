@@ -1,4 +1,4 @@
-"""Configuration and options dialogs for Cerberus Lookup."""
+"""Configuration and options dialogs for Cerberus WAN."""
 
 from __future__ import annotations
 
@@ -118,7 +118,7 @@ def to_entry_payload(user_input: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-class CerberusLookupConfigFlow(ConfigFlow, domain=DOMAIN):
+class CerberusWanConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the initial setup dialog."""
 
     VERSION = 1
@@ -136,7 +136,7 @@ class CerberusLookupConfigFlow(ConfigFlow, domain=DOMAIN):
         """
         if user_input is not None:
             return self.async_create_entry(
-                title="Cerberus Lookup", data=to_entry_payload(user_input)
+                title="Cerberus WAN", data=to_entry_payload(user_input)
             )
 
         address, asn = await detect_current_asn(self.hass)
@@ -157,10 +157,10 @@ class CerberusLookupConfigFlow(ConfigFlow, domain=DOMAIN):
         Returns:
             The options flow handler.
         """
-        return CerberusLookupOptionsFlow()
+        return CerberusWanOptionsFlow()
 
 
-class CerberusLookupOptionsFlow(OptionsFlow):
+class CerberusWanOptionsFlow(OptionsFlow):
     """Handle edits to the provider table after setup."""
 
     async def async_step_init(

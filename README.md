@@ -1,4 +1,4 @@
-# Cerberus Lookup
+# Cerberus WAN
 
 A Home Assistant sensor that tells you **which provider is carrying your traffic
 right now**.
@@ -59,11 +59,11 @@ close.
 ### HACS
 
 Add this repository as a custom repository of type "Integration", then install
-Cerberus Lookup and restart Home Assistant.
+Cerberus WAN and restart Home Assistant.
 
 ### Manual
 
-Copy `custom_components/cerberus_lookup` into your Home Assistant `config`
+Copy `custom_components/cerberus_wan` into your Home Assistant `config`
 directory and restart.
 
 Then add the integration from **Settings, Devices and services, Add

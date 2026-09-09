@@ -1,0 +1,12 @@
+{
+  "domain": "cerberus_wan",
+  "name": "Cerberus WAN",
+  "version": "0.1.0",
+  "documentation": "https://github.com/drake69/cerberus-wan",
+  "issue_tracker": "https://github.com/drake69/cerberus-wan/issues",
+  "codeowners": ["@drake69"],
+  "config_flow": true,
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": ["dnspython>=2.6.1"]
+}

@@ -1,4 +1,4 @@
-"""Cerberus Lookup: tells which provider is currently carrying the traffic."""
+"""Cerberus WAN: tells which provider is currently carrying the traffic."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-DOMAIN = "cerberus_lookup"
+DOMAIN = "cerberus_wan"
 PLATFORMS = [Platform.SENSOR]
 
 CONF_PROVIDERS = "providers"

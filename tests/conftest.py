@@ -1,6 +1,6 @@
 """Load the Home Assistant free modules without importing the package.
 
-Importing custom_components.cerberus_lookup would execute the package
+Importing custom_components.cerberus_wan would execute the package
 __init__, which imports Home Assistant. The modules under test deliberately
 do not depend on it, so they are loaded straight from their file instead.
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-COMPONENT_DIR = Path(__file__).parents[1] / "custom_components" / "cerberus_lookup"
+COMPONENT_DIR = Path(__file__).parents[1] / "custom_components" / "cerberus_wan"
 
 
 def load_pure_module(name: str):

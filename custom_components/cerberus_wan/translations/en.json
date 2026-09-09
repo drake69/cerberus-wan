@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Cerberus Lookup",
+        "title": "Cerberus WAN",
         "description": "Detected right now: {detected}.\n\nThe network you are going out through is already in the table below, without a name. Open the link to see who it belongs to, then type the name you want the sensor to show:\n\n`35612 = Eolo`\n\nOne provider per line. You do not have to add them all now: whenever the sensor shows the unknown label, reopen this dialog and the network in use will be waiting here for a name.",
         "data": {
           "provider_table": "Providers",
@@ -15,7 +15,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Cerberus Lookup",
+        "title": "Cerberus WAN",
         "description": "Detected right now: {detected}.\n\nIf the network in use was not mapped yet, it has been appended to the table without a name. Open the link to see who it belongs to, then type the name you want the sensor to show:\n\n`35612 = Eolo`\n\nOne provider per line. Lines that cannot be read are ignored, so a typo costs one provider and never a dialog that refuses to close.",
         "data": {
           "provider_table": "Providers",

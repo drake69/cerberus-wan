@@ -1,5 +1,5 @@
 [project]
-name = "cerberus-lookup"
+name = "cerberus-wan"
 version = "0.1.0"
 description = "Home Assistant sensor telling which provider is carrying the traffic"
 readme = "README.md"
