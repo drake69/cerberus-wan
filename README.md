@@ -168,6 +168,15 @@ The event carries `previous_label`, `label`, `public_address`, `asn`,
 `changed_at` and `entry_id`. Use it when the automation needs to know where the
 traffic went; use the field when it just needs to run.
 
+**An automation attached this way does not show up under "Related".** That card
+lists automations, scripts and scenes whose own configuration names this
+service, and here the reference points the other way: the automation knows
+nothing about Cerberus WAN, it is Cerberus WAN that calls it, and the link
+lives in the integration options. An automation triggered on the event is
+invisible there too, since an event trigger names no entity. Only one that
+triggers on the state of the provider sensor appears in that card. To see what
+is attached, reopen the dialog: the field holds the list.
+
 ## How it works
 
 Two DNS queries, asked at very different rates:
