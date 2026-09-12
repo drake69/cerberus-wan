@@ -1,0 +1,14 @@
+Cerberus WAN
+Copyright the Cerberus WAN contributors
+Licensed under the MIT Licence, see LICENSE.
+
+This product includes artwork from Material Design Icons
+(https://pictogrammers.com/library/mdi/), by Pictogrammers, licensed under the
+Apache Licence, Version 2.0.
+
+The brand icon in brand/ and in custom_components/cerberus_wan/brand/ is built
+from the "dog" glyph of that set, placed three times. The same glyph is used as
+the icon of the provider sensor.
+
+You may obtain a copy of the Apache Licence at
+http://www.apache.org/licenses/LICENSE-2.0

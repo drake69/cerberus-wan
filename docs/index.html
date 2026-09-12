@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cerberus WAN</title>
+<link rel="icon" type="image/png" href="img/icon.png">
 <meta name="description" content="A Home Assistant integration that tells you which provider is carrying your traffic right now. Two DNS queries, no account, any router.">
 <meta property="og:title" content="Cerberus WAN">
 <meta property="og:description" content="Which provider is carrying your traffic right now? Two DNS queries, no account, any router.">
@@ -32,7 +33,8 @@ a{color:inherit}
 h1,h2,h3{line-height:1.2; margin:0}
 code{background:var(--code-bg); padding:.15em .4em; border-radius:4px; font-size:.9em}
 
-header{padding:88px 0 64px; border-bottom:1px solid var(--line)}
+header{padding:72px 0 64px; border-bottom:1px solid var(--line)}
+.mark{display:block; width:88px; height:88px; margin:0 0 26px}
 h1{font-size:clamp(30px,5.2vw,50px); letter-spacing:-.02em; max-width:17ch}
 header p.lead{font-size:clamp(17px,2.2vw,20px); color:var(--muted); margin:22px 0 0; max-width:60ch}
 .btns{display:flex; flex-wrap:wrap; gap:12px; margin-top:34px}
@@ -72,6 +74,7 @@ footer a{font-weight:600}
 
 <header>
   <div class="wrap">
+    <img class="mark" src="img/icon.png" alt="" width="96" height="96">
     <h1>Which provider is carrying your traffic right now?</h1>
     <p class="lead">A Home Assistant integration that answers that one question,
     on any line and behind any router. Two DNS queries and a table you write
