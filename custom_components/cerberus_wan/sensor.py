@@ -23,7 +23,7 @@ from homeassistant.util import slugify
 
 from . import DOMAIN
 from .assembly import build_monitor
-from .domain import ChangeWindow, Observation, WanMonitor
+from .domain import ChangeWindow, LabelTimeline, Observation, WanMonitor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,13 +32,6 @@ _LOGGER = logging.getLogger(__name__)
 # switchover noticed too late. It costs one DNS query: who owns the address is
 # answered from the local table, and asked again only when the address changes.
 SCAN_INTERVAL = timedelta(seconds=15)
-
-# A share sensor holds 100 while its label is the active one and 0 otherwise.
-# Recorded as a measurement, its long term mean over any window is therefore
-# the percentage of time spent on that provider, which is the question the
-# plain text sensor cannot answer.
-ACTIVE = 100
-INACTIVE = 0
 
 # The window has to be swept often enough for a change to leave it on time,
 # and no more often than that: sweeping it hourly is what makes the statistics
@@ -155,9 +148,39 @@ class CerberusEntity(CoordinatorEntity[NetworkCoordinator], SensorEntity):
         """
         return self.coordinator.data
 
+    @property
+    def monitor(self) -> WanMonitor:
+        """Return the monitor behind the shared loop.
 
-class ProviderSensor(CerberusEntity):
-    """Reports the provider label, or the disconnected or unknown label."""
+        Returns:
+            The monitor every entity of this entry is reading.
+        """
+        return self.coordinator.monitor
+
+
+@dataclass
+class StoredTimeline(ExtraStoredData):
+    """The timeline as it survives a restart."""
+
+    segments: list[list[str]]
+
+    def as_dict(self) -> dict:
+        """Return what goes into the restore store.
+
+        Returns:
+            The segments, each a moment and the label it opened.
+        """
+        return {"segments": self.segments}
+
+
+class ProviderSensor(CerberusEntity, RestoreEntity):
+    """Reports the provider label, or the disconnected or unknown label.
+
+    It is also the entity that persists the timeline the shares are computed
+    from. That job belongs to an entity that exists whatever the configuration
+    says, and the shares themselves do not qualify: renaming a provider
+    removes its entity and would take the record of the whole day with it.
+    """
 
     _attr_name = None
     _attr_icon = "mdi:dog"
@@ -183,49 +206,52 @@ class ProviderSensor(CerberusEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Return the evidence behind the label.
+        """Return the evidence behind the label, and the reach of the shares.
 
         Returns:
-            The public address and the announcing autonomous system number.
+            The public address, the announcing autonomous system number, and
+            how many hours of record the share sensors are speaking for. The
+            last one belongs here rather than on each share: it is a fact
+            about the installation, and this entity is the one that writes on
+            every cycle anyway.
         """
         asn = self.observation.asn
         return {
             "public_address": self.observation.address,
             "asn": asn.number if asn else None,
+            "covered_hours": self.monitor.covered_hours,
         }
 
-
-class ShareSensor(CerberusEntity):
-    """Holds 100 while its label is active, so its mean is a percentage."""
-
-    _attr_native_unit_of_measurement = "%"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:chart-donut"
-
-    def __init__(
-        self, coordinator: NetworkCoordinator, entry: ConfigEntry, label: str
-    ) -> None:
-        """Bind the entity to the one label it tracks.
-
-        Args:
-            coordinator: the shared polling loop.
-            entry: the config entry this entity belongs to.
-            label: the label whose share of time this entity measures.
-        """
-        super().__init__(coordinator, entry)
-        self._label = label
-        self._attr_name = label
-        self._attr_unique_id = f"{entry.entry_id}_share_{slugify(label)}"
-
     @property
-    def native_value(self) -> int:
-        """Return 100 while this label is the active one, 0 otherwise.
+    def extra_restore_state_data(self) -> StoredTimeline:
+        """Return the timeline to keep across a restart.
 
         Returns:
-            The instantaneous share, whose long term mean is the percentage of
-            time spent on this provider.
+            The segments currently held.
         """
-        return ACTIVE if self.observation.label == self._label else INACTIVE
+        return StoredTimeline(self.monitor.timeline.to_list())
+
+    async def async_added_to_hass(self) -> None:
+        """Take back the timeline the shares were computed from.
+
+        Without this a restart would empty the day and every provider would
+        read as a share of the minutes since the restart. The segment that was
+        open when Home Assistant went down is credited to the label it had:
+        the line is not known to have moved while nobody was watching, and
+        assuming it did would be a guess in the other direction.
+        """
+        await super().async_added_to_hass()
+        stored = await self.async_get_last_extra_data()
+        if stored is None:
+            return
+        self.monitor.timeline.adopt(
+            LabelTimeline.from_list(stored.as_dict().get("segments"))
+        )
+        self.monitor.expire_changes()
+        # The shares are read by other entities, which may already have
+        # published a percentage of the seconds since the restart. Telling the
+        # loop is what republishes them now instead of on the next cycle.
+        self.coordinator.async_update_listeners()
 
 
 class StatisticEntity(CerberusEntity):
@@ -249,22 +275,97 @@ class StatisticEntity(CerberusEntity):
         self._published = None
 
     @property
-    def monitor(self) -> WanMonitor:
-        """Return the monitor holding the window.
+    def publication(self) -> object:
+        """Return what has to move before this entity writes its state.
+
+        The state itself, for an entity whose attributes say nothing a reader
+        would act upon. An entity whose attributes do carry something acted
+        upon overrides this, so a change there is published rather than kept
+        waiting for the number to move.
 
         Returns:
-            The monitor behind the coordinator.
+            The value compared against what was last written.
         """
-        return self.coordinator.monitor
+        return self.native_value
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Write the state only when the number reported has changed."""
-        value = self.native_value
+        """Write the state only when what is reported has changed."""
+        value = self.publication
         if value == self._published:
             return
         self._published = value
         super()._handle_coordinator_update()
+
+
+class ShareSensor(StatisticEntity):
+    """How much of the recorded day this provider carried the traffic.
+
+    The number is a share of what is on the record, not of the wall clock: an
+    installation running for two hours can only speak for those two hours, and
+    the hours it can speak for are published on the provider sensor rather than
+    folded into this percentage.
+    """
+
+    _attr_native_unit_of_measurement = "%"
+    _attr_icon = "mdi:chart-donut"
+    _attr_suggested_display_precision = 1
+
+    def __init__(
+        self, coordinator: NetworkCoordinator, entry: ConfigEntry, label: str
+    ) -> None:
+        """Bind the entity to the one label it measures.
+
+        Args:
+            coordinator: the shared polling loop.
+            entry: the config entry this entity belongs to.
+            label: the label whose share of the day this entity measures.
+        """
+        super().__init__(coordinator, entry)
+        self._label = label
+        self._attr_name = label
+        self._attr_unique_id = f"{entry.entry_id}_share_{slugify(label)}"
+
+    @property
+    def active(self) -> bool:
+        """Report whether this provider is the one carrying right now.
+
+        Returns:
+            True while this label is the one being reported.
+        """
+        return self.observation.label == self._label
+
+    @property
+    def native_value(self) -> float:
+        """Return the percentage of the recorded day spent on this provider.
+
+        Returns:
+            The share, zero before anything has been recorded.
+        """
+        return self.monitor.share_of(self._label)
+
+    @property
+    def publication(self) -> object:
+        """Return the number and whether this provider is carrying.
+
+        A switchover can move the flag without moving the percentage, because
+        a percentage rounded to a tenth does not notice a second. Publishing on
+        the pair is what keeps the flag from going stale until the number
+        happens to move.
+
+        Returns:
+            The pair compared against what was last written.
+        """
+        return (self.native_value, self.active)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return what the percentage alone does not say.
+
+        Returns:
+            Whether this provider is the one carrying right now.
+        """
+        return {"active": self.active}
 
 
 @dataclass

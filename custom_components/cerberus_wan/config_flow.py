@@ -20,7 +20,7 @@ from . import (
     DOMAIN,
     setting,
 )
-from .assembly import detect_network, monitor_settings
+from .assembly import detect_network, monitor_settings, seen_networks
 from .domain import Asn, ProviderTable
 
 CONF_PROVIDER_TABLE = "provider_table"
@@ -55,7 +55,7 @@ def build_schema(defaults: dict[str, Any]) -> vol.Schema:
         {
             vol.Optional(
                 CONF_PROVIDER_TABLE, default=defaults.get(CONF_PROVIDER_TABLE, "")
-            ): str,
+            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             vol.Optional(
                 CONF_DISCONNECTED_LABEL,
                 default=defaults.get(
@@ -108,6 +108,9 @@ class CerberusWanConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Detect the network in use, ask for its name, and create the entry.
 
+        Networks recorded by an earlier install are offered too, which is what
+        makes reinstalling cost a confirmation instead of a retyped table.
+
         Args:
             user_input: submitted values, or None when the form opens.
 
@@ -120,10 +123,11 @@ class CerberusWanConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
         address, asn = await detect_network(self.hass)
+        history = await seen_networks(self.hass)
         return self.async_show_form(
             step_id="user",
             data_schema=build_schema(
-                {CONF_PROVIDER_TABLE: ProviderTable().suggestion(asn)}
+                {CONF_PROVIDER_TABLE: ProviderTable().suggestion(asn, *history)}
             ),
             description_placeholders={"detected": describe_detection(address, asn)},
         )
@@ -148,7 +152,12 @@ class CerberusWanOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Show the table, offering the network in use when it is unmapped.
+        """Show the table, offering every network still without a name.
+
+        The network in use comes first, then the ones seen before it. Naming a
+        provider therefore no longer has to happen while that provider is the
+        one carrying the traffic, which for a backup line is a window of a few
+        minutes a year.
 
         Args:
             user_input: submitted values, or None when the form opens.
@@ -161,11 +170,12 @@ class CerberusWanOptionsFlow(OptionsFlow):
 
         settings = monitor_settings(self.config_entry)
         address, asn = await detect_network(self.hass)
+        history = await seen_networks(self.hass)
         return self.async_show_form(
             step_id="init",
             data_schema=build_schema(
                 {
-                    CONF_PROVIDER_TABLE: settings.table.suggestion(asn),
+                    CONF_PROVIDER_TABLE: settings.table.suggestion(asn, *history),
                     CONF_DISCONNECTED_LABEL: settings.disconnected_label,
                     CONF_UNKNOWN_LABEL: settings.unknown_label,
                     CONF_CHANGE_TARGETS: setting(

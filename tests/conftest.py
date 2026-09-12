@@ -13,3 +13,11 @@ from pathlib import Path
 
 COMPONENT_DIR = Path(__file__).parents[1] / "custom_components" / "cerberus_wan"
 sys.path.insert(0, str(COMPONENT_DIR))
+
+# The tests under homeassistant/ do the opposite: they reach the component the
+# way Home Assistant does, as custom_components.cerberus_wan, so that the
+# config entries, the selectors and the flow manager are the real ones. Both
+# paths coexist, which means the same module can be imported under two names:
+# a test picks one side and stays on it, because a dataclass imported twice
+# compares unequal to itself.
+sys.path.insert(0, str(Path(__file__).parents[1]))

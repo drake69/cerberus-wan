@@ -24,17 +24,26 @@ Both labels are configurable, so you can phrase them in your own language.
 | Entity | What it holds |
 |---|---|
 | the provider sensor | the label of the network in use, with the address and the ASN as attributes |
-| one share sensor per label | 100 while that provider is the active one, 0 otherwise, so its long term mean is the percentage of time spent on it |
+| one share sensor per label | the percentage of the recorded day that provider carried the traffic, with an `active` attribute saying whether it is carrying right now |
 | `Changes in 24 hours` | how many times the provider changed in the last 24 hours, as a moving window |
 | `Changes per hour` | the same window divided by its width: the moving average of switchovers per hour |
 
-The two statistics are recomputed the moment a change happens, and swept once
-an hour so that a change leaves the window on time. They are written only when
-the number actually moves, so a quiet line costs no state writes at all. The
-window is kept across a restart: a statistic that resets whenever Home
-Assistant does is a statistic that lies.
+The shares are percentages of what is on the record, not of the wall clock. An
+installation running for two hours can only speak for those two hours, so the
+provider sensor publishes `covered_hours` beside the label: a share of 100% is
+worth reading only next to how long the record reaches back. Once the record
+covers a full day, the shares are shares of the last twenty four hours.
 
-Losing the line counts as a change, because it is one.
+The statistics are recomputed the moment a change happens, and swept once an
+hour so that a change leaves the window on time. They are written only when the
+number actually moves, so a quiet line costs no state writes at all. Both the
+window and the timeline are kept across a restart: a statistic that resets
+whenever Home Assistant does is a statistic that lies. The segment that was
+open when Home Assistant went down keeps its label, because the line is not
+known to have moved while nobody was watching.
+
+Losing the line counts as a change, because it is one, and the time spent
+disconnected is a share like any other.
 
 ## Reacting to a change
 
@@ -90,23 +99,41 @@ this works.
 
 ## Adding a provider you do not know yet
 
-You do not need to research anything. Install the integration with an empty
-table, look at the sensor attributes, and read `asn`. That is the number to add.
+You do not need to research anything, and you do not need to be quick about
+it. Every network the integration has gone out through is offered in the
+options dialog, without a name, ready to be given one: the network in use
+first, then the ones seen before it. A backup line can therefore be named the
+day after the failover, not only during the few minutes it was carrying the
+traffic.
+
+```
+35612 = Eolo;
+30722 = ;
+```
+
+Fill in the name and save. Accepted forms for the number are `35612`,
+`AS35612` and `as 35612`.
+
+Each row is closed by a semicolon. That is what lets a row end at the end of
+the line or at the semicolon, whichever comes first, and it is not decoration:
+without it, two providers that end up on one line are read as one, and the
+number of the second lands inside the name of the first.
+
+```
+35612 = Eolo; 30722 = Fastweb;    one line, two providers
+35612 = Eolo 30722 = Fastweb      one provider named "Eolo 30722 = Fastweb"
+```
+
+Rows that cannot be read are skipped, so a typo costs one provider rather than
+a dialog that will not close.
+
+If you would rather read the number off the sensor yourself, it is published
+as an attribute:
 
 ```
 asn: 35612
 public_address: 146.241.74.20
 ```
-
-Then add one line in the options dialog:
-
-```
-35612 = Eolo
-```
-
-Accepted forms are `35612`, `AS35612` and `as 35612`. Lines that cannot be read
-are skipped, so a typo costs one provider rather than a dialog that will not
-close.
 
 ## Installation
 

@@ -9,6 +9,7 @@ rules be tested without a running Home Assistant and without a network.
 from .asn import Asn
 from .asn_cache import AsnCache, CacheEntry
 from .change_window import ChangeWindow
+from .label_timeline import LabelTimeline
 from .monitor import MonitorSettings, WanMonitor
 from .observation import Observation
 from .ports import AddressProbe, AsnRegistry, CacheStore, ChangeListener, Clock
@@ -24,6 +25,7 @@ __all__ = [
     "ChangeListener",
     "ChangeWindow",
     "Clock",
+    "LabelTimeline",
     "MonitorSettings",
     "Observation",
     "ProviderTable",

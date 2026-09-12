@@ -1,7 +1,7 @@
 {
   "domain": "cerberus_wan",
   "name": "Cerberus WAN",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "documentation": "https://github.com/drake69/cerberus-wan",
   "issue_tracker": "https://github.com/drake69/cerberus-wan/issues",
   "codeowners": ["@drake69"],

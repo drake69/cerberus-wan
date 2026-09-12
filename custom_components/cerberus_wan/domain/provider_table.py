@@ -17,18 +17,26 @@ class ProviderTable:
     def parse(cls, text: str) -> ProviderTable:
         """Read the table as it is written in the dialog.
 
-        One provider per line, as "35612 = Eolo". Blank lines and lines without
-        a usable number are skipped rather than rejected, so a typo costs one
-        missing provider instead of a dialog that refuses to close.
+        One provider per row, as "35612 = Eolo;". A row ends at the semicolon
+        or at the end of the line, and either alone is enough: the semicolon is
+        what keeps the table readable when the field hands back everything on
+        one line, and the line break is what keeps it readable when it does
+        not. Without the semicolon two providers written on one line would be
+        read as one, and the number of the second would end up inside the name
+        of the first.
+
+        Blank rows and rows without a usable number are skipped rather than
+        rejected, so a typo costs one missing provider instead of a dialog that
+        refuses to close.
 
         Args:
-            text: the raw content of the text area.
+            text: the raw content of the field.
 
         Returns:
             The table the text describes.
         """
         labels: dict[str, str] = {}
-        for line in text.splitlines():
+        for line in text.replace(";", "\n").splitlines():
             number, separator, label = line.partition("=")
             if not separator:
                 continue
@@ -98,28 +106,48 @@ class ProviderTable:
     def format(self) -> str:
         """Render the table back into editable text.
 
+        Every row is closed by a semicolon rather than merely separated by one.
+        A closed row can be written after without a thought: whoever adds a
+        provider at the end of the table cannot join it to the one before by
+        forgetting a separator that was never there to forget.
+
         Returns:
-            One "ASN = label" line per provider, ordered by number so that 9
-            comes before 35612 rather than after it.
+            One closed "ASN = label;" row per provider, ordered by number so
+            that 9 comes before 35612 rather than after it.
         """
         rows = sorted(self.labels.items(), key=lambda item: int(item[0]))
-        return "\n".join(f"{asn} = {label}" for asn, label in rows)
+        return "\n".join(f"{asn} = {label};" for asn, label in rows)
 
-    def suggestion(self, asn: Asn | None) -> str:
-        """Return the table text with the detected network offered for naming.
+    def suggestion(self, *seen: Asn | None) -> str:
+        """Return the table text with the unnamed networks offered for naming.
 
-        The network in use is appended without a label, so naming the provider
-        is the only thing left to do. A network already named is left alone,
-        and so is the case where nothing could be detected: a failed lookup has
-        to open the form, not break it.
+        Every network given that has no name yet is appended without a label,
+        in the order given, so naming the provider is the only thing left to
+        do. The network in use is offered first because it is the one whoever
+        opened the dialog is most likely looking for, but the networks seen
+        while it was down are offered too: a failover that ended an hour ago
+        would otherwise leave nothing to name, and the number that carried the
+        traffic would have to be dug out of the sensor history by hand.
+
+        The offered rows are closed like every other row, so the name goes
+        between the equals sign and the semicolon.
+
+        A network already named is left alone, and so is the case where
+        nothing could be detected: a failed lookup has to open the form, not
+        break it.
 
         Args:
-            asn: the announcing network, or None.
+            *seen: the networks to offer, most relevant first. Entries that
+                are None are ignored rather than rejected.
 
         Returns:
             The text to prefill the form with.
         """
-        text = self.format()
-        if asn is None or self.knows(asn):
-            return text
-        return f"{text}\n{asn} = ".lstrip("\n")
+        rows = [self.format()]
+        offered: set[str] = set()
+        for asn in seen:
+            if asn is None or self.knows(asn) or asn.key in offered:
+                continue
+            offered.add(asn.key)
+            rows.append(f"{asn} = ;")
+        return "\n".join(row for row in rows if row)

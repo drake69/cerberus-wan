@@ -72,3 +72,34 @@ def test_a_corrupted_row_costs_one_address_and_not_the_startup() -> None:
 def test_nothing_stored_is_an_empty_table() -> None:
     """A first run has no file to read."""
     assert len(AsnCache.from_dict(None)) == 0
+
+
+def test_seen_networks_come_back_newest_first() -> None:
+    """The network just left is the one most likely to still need a name."""
+    cache = AsnCache()
+    cache.remember("1.2.3.4", Asn(35612), MOMENT)
+    cache.remember("5.6.7.8", Asn(51207), MOMENT + timedelta(hours=1))
+    assert cache.seen_asns == [Asn(51207), Asn(35612)]
+
+
+def test_two_addresses_of_one_network_are_one_network() -> None:
+    """A renewed address is not a second provider to name."""
+    cache = AsnCache()
+    cache.remember("1.2.3.4", Asn(35612), MOMENT)
+    cache.remember("1.2.3.5", Asn(35612), MOMENT + timedelta(days=1))
+    assert cache.seen_asns == [Asn(35612)]
+
+
+def test_an_unresolved_address_is_not_a_network() -> None:
+    """A lookup that never answered has nothing to offer for naming."""
+    cache = AsnCache()
+    cache.remember("1.2.3.4", None, MOMENT)
+    assert cache.seen_asns == []
+
+
+def test_a_stale_answer_is_still_a_network_that_was_seen() -> None:
+    """Naming a provider is not a lookup: the answer needs no freshness."""
+    cache = AsnCache()
+    cache.remember("1.2.3.4", Asn(35612), MOMENT)
+    assert cache.fresh("1.2.3.4", MOMENT + REFRESH + timedelta(days=1)) is None
+    assert cache.seen_asns == [Asn(35612)]

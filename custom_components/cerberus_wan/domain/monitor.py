@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from .asn import Asn
 from .asn_cache import AsnCache
 from .change_window import ChangeWindow
+from .label_timeline import LabelTimeline
 from .observation import Observation
 from .ports import AddressProbe, AsnRegistry, CacheStore, ChangeListener, Clock
 from .provider_table import ProviderTable
@@ -74,6 +75,7 @@ class WanMonitor:
         self._listener = listener
         self._cache = AsnCache()
         self._window = ChangeWindow()
+        self._timeline = LabelTimeline()
         self._current: Observation | None = None
 
     @property
@@ -95,6 +97,38 @@ class WanMonitor:
         return self._window
 
     @property
+    def timeline(self) -> LabelTimeline:
+        """Return the record of which provider carried the traffic and when.
+
+        Returns:
+            The timeline this monitor has been filling.
+        """
+        return self._timeline
+
+    def share_of(self, label: str) -> float:
+        """Return the percentage of the recorded day spent on a provider.
+
+        Args:
+            label: the provider to report on.
+
+        Returns:
+            The percentage, zero before anything has been recorded.
+        """
+        return self._timeline.share(label, self._clock.now())
+
+    @property
+    def covered_hours(self) -> float:
+        """Return how much of the window the shares can speak for.
+
+        A share of two hours of record is not a share of the day, and whoever
+        reads the number is entitled to know which one it is.
+
+        Returns:
+            The hours on the record, at most the width of the window.
+        """
+        return round(self._timeline.covered(self._clock.now()) / 3600, 2)
+
+    @property
     def changes_last_day(self) -> int:
         """Return how many times the provider changed in the last day.
 
@@ -113,13 +147,20 @@ class WanMonitor:
         return self._window.per_hour(self._clock.now())
 
     def expire_changes(self) -> bool:
-        """Drop the changes that have left the window.
+        """Drop the changes and the segments that have left the window.
+
+        Both records are swept in one call because both are read by entities
+        of the same entry: sweeping one and not the other would publish a
+        count of the last day next to a share of something longer.
 
         Returns:
             True when something was dropped, so the caller knows the published
             statistics are now out of date.
         """
-        return self._window.expire(self._clock.now())
+        now = self._clock.now()
+        dropped_changes = self._window.expire(now)
+        dropped_segments = self._timeline.expire(now)
+        return dropped_changes or dropped_segments
 
     @property
     def cache(self) -> AsnCache:
@@ -197,6 +238,7 @@ class WanMonitor:
         """
         previous = self._current
         self._current = observation
+        self._timeline.record(observation.moment, observation.label)
         if not observation.follows(previous):
             return observation
 

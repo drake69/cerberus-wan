@@ -1,6 +1,6 @@
 [project]
 name = "cerberus-wan"
-version = "0.2.0"
+version = "0.4.0"
 description = "Home Assistant sensor telling which provider is carrying the traffic"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -8,10 +8,19 @@ license = { text = "MIT" }
 dependencies = ["dnspython>=2.6.1"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.6"]
+dev = [
+    "pytest>=8.0",
+    "pytest-homeassistant-custom-component>=0.13.236",
+    "ruff>=0.6",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The Home Assistant test harness is a pytest plugin that loads for every test,
+# including the ones that never touch it. Auto mode is what lets it manage the
+# event loop it expects to find, so the domain tests keep running unchanged
+# next to the ones that boot a real Home Assistant.
+asyncio_mode = "auto"
 
 [tool.ruff]
 target-version = "py313"

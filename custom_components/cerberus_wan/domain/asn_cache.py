@@ -104,6 +104,23 @@ class AsnCache:
             if now - entry.checked_at < FORGET
         }
 
+    @property
+    def seen_asns(self) -> list[Asn]:
+        """Return every network this table has resolved, most recent first.
+
+        The table is keyed by address, but the address is only ever the way to
+        reach the question that matters: which networks has this installation
+        gone out through. Two addresses of one network answer once.
+
+        Returns:
+            The networks, newest first, without repeats. Addresses that could
+            not be resolved contribute nothing: a lookup that did not answer is
+            not a network.
+        """
+        answered = [entry for entry in self._entries.values() if entry.asn is not None]
+        answered.sort(key=lambda entry: entry.checked_at, reverse=True)
+        return list(dict.fromkeys(entry.asn for entry in answered))
+
     def __len__(self) -> int:
         """Return how many addresses are known.
 
