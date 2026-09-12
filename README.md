@@ -6,6 +6,8 @@ A Home Assistant integration that answers that one question, on any line, with
 no account and no API key. Two DNS queries and a table you write yourself.
 
 [![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=drake69&repository=cerberus-wan&category=integration)
+
+[![Site](https://img.shields.io/badge/site-drake69.github.io%2Fcerberus--wan-17476E)](https://drake69.github.io/cerberus-wan/)
 [![Validate](https://github.com/drake69/cerberus-wan/actions/workflows/validate.yml/badge.svg)](https://github.com/drake69/cerberus-wan/actions/workflows/validate.yml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/drake69/cerberus-wan?style=flat&logo=github)](https://github.com/drake69/cerberus-wan)
