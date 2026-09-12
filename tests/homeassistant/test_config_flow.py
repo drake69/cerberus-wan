@@ -18,6 +18,31 @@ from custom_components.cerberus_wan.domain import Asn
 
 DETECT = "custom_components.cerberus_wan.config_flow.detect_network"
 SEEN = "custom_components.cerberus_wan.config_flow.seen_networks"
+PROBE = "custom_components.cerberus_wan.assembly.DnsAddressProbe"
+REGISTRY = "custom_components.cerberus_wan.assembly.CymruAsnRegistry"
+
+
+class Silent:
+    """A network that answers nothing, standing in for both lookups."""
+
+    async def public_address(self) -> None:
+        """Report no address.
+
+        Returns:
+            None, always.
+        """
+        return
+
+    async def announcing_asn(self, address: str) -> None:
+        """Report no announcing network.
+
+        Args:
+            address: the address being resolved, ignored here.
+
+        Returns:
+            None, always.
+        """
+        return
 
 
 async def open_form(hass: HomeAssistant, detected=None, seen=None):
@@ -38,6 +63,33 @@ async def open_form(hass: HomeAssistant, detected=None, seen=None):
         return await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "user"}
         )
+
+
+async def submit(hass: HomeAssistant, flow_id: str, table: str):
+    """Fill the provider field and close the dialog, with the network silenced.
+
+    Closing the dialog creates the entry, and creating the entry sets the
+    component up, which would otherwise send the real lookups out. Without
+    this the test passes or fails depending on whether the first refresh gets
+    a slice of the loop before the test ends.
+
+    Args:
+        hass: the running Home Assistant instance.
+        flow_id: the dialog to submit.
+        table: the provider text to submit.
+
+    Returns:
+        The result of closing the dialog.
+    """
+    with (
+        patch(PROBE, return_value=Silent()),
+        patch(REGISTRY, return_value=Silent()),
+    ):
+        created = await hass.config_entries.flow.async_configure(
+            flow_id, {CONF_PROVIDER_TABLE: table}
+        )
+        await hass.async_block_till_done()
+    return created
 
 
 def prefill(result) -> str:
@@ -82,10 +134,7 @@ async def test_two_providers_on_one_line_reach_the_entry_apart(
 ) -> None:
     """The regression: the field can hand the table back on a single line."""
     result = await open_form(hass, detected=("1.2.3.4", Asn(35612)))
-    created = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_PROVIDER_TABLE: "35612 = Eolo; 51207 = Iliad;"},
-    )
+    created = await submit(hass, result["flow_id"], "35612 = Eolo; 51207 = Iliad;")
     assert created["type"] is FlowResultType.CREATE_ENTRY
     assert created["data"][CONF_PROVIDERS] == {"35612": "Eolo", "51207": "Iliad"}
 
@@ -93,9 +142,8 @@ async def test_two_providers_on_one_line_reach_the_entry_apart(
 async def test_a_typo_does_not_keep_the_dialog_open(hass: HomeAssistant) -> None:
     """An unreadable row costs one provider, never a form that will not close."""
     result = await open_form(hass, detected=("1.2.3.4", Asn(35612)))
-    created = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_PROVIDER_TABLE: "35612 = Eolo; nonsense; 51207 = ;"},
+    created = await submit(
+        hass, result["flow_id"], "35612 = Eolo; nonsense; 51207 = ;"
     )
     assert created["type"] is FlowResultType.CREATE_ENTRY
     assert created["data"][CONF_PROVIDERS] == {"35612": "Eolo"}
