@@ -8,6 +8,10 @@ no account and no API key. Two DNS queries and a table you write yourself.
 [![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=drake69&repository=cerberus-wan&category=integration)
 [![Validate](https://github.com/drake69/cerberus-wan/actions/workflows/validate.yml/badge.svg)](https://github.com/drake69/cerberus-wan/actions/workflows/validate.yml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/drake69/cerberus-wan?style=flat&logo=github)](https://github.com/drake69/cerberus-wan)
+
+**Does this answer a question your router would not? Leave a star.** It costs
+you one click and it is most of how the next person with two lines finds it.
 
 ## Why it exists
 
@@ -23,6 +27,39 @@ works, and has to be redone by hand every time something changes.
 Cerberus WAN asks the outside world instead of asking the router: the public
 address as seen from outside, then who announces that address. The answer is
 the provider whose cable the traffic is on, whatever the router believes.
+
+## Philosophy
+
+Six rules. Everything in here follows from them, and anything that fights them
+does not get built.
+
+**Super simple.** It does one thing. No speedtest, no graphs, no network
+diagnostics, no per interface counters. One sensor that names the provider,
+and the few statistics that come free once you are already watching it.
+
+**No key, no service.** No account, no API key, no quota, no registration, no
+terms of service. Nothing here can be discontinued, rate limited or put behind
+a paywall, because there is no third party to do it: the whole integration is
+two DNS queries. If DNS works, this works.
+
+**No complication.** No YAML, no template sensor to copy, no router to log
+into. One dialog with one field that matters, and it opens with the network
+you are on already in it, waiting for a name. Setup is typing that name.
+
+**Any hardware.** It asks the outside world, not the router. There is no OID to
+hunt for, no vendor API to authenticate against, no model specific template to
+copy. Whatever carries your lines, and whatever brand it is, the public address
+seen from outside is the same evidence.
+
+**It says when it does not know.** `Unknown` is an answer, not an error, and it
+is kept apart from `Disconnected`: one means the traffic gets out through a
+network you have not named, the other means nothing gets out at all. It never
+guesses which line you are on to avoid admitting it cannot tell.
+
+**One objective: watch your WAN switch.** Not bandwidth, not uptime, not
+quality of service. The question is which line is carrying the traffic right
+now, and the moment it changes. Anything that does not serve that question
+stays out.
 
 ## Installation
 
@@ -209,6 +246,19 @@ Nothing under `domain/` imports Home Assistant or a DNS library: it reaches the
 outside world only through the protocols in `domain/ports.py`. That is why the
 test suite runs the whole model against fakes, with no network and no Home
 Assistant installed.
+
+## If it is useful, say so
+
+**Star the repository.** A custom integration is not in the default store, so
+it is found by search and by word of mouth, and the star count is most of what
+either has to go on. One click.
+
+Going further:
+
+- something wrong, or a provider that will not resolve? [Open an issue](https://github.com/drake69/cerberus-wan/issues).
+- running it on a line neither of the two it was written against? Say which
+  network and which country in an issue. That is the report the project most
+  needs and cannot produce on its own.
 
 ## Licence
 
