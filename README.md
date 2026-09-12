@@ -30,8 +30,8 @@ the provider whose cable the traffic is on, whatever the router believes.
 
 ## Philosophy
 
-Six rules. Everything in here follows from them, and anything that fights them
-does not get built.
+Eight rules. Everything in here follows from them, and anything that fights
+them does not get built.
 
 **Super simple.** It does one thing. No speedtest, no graphs, no network
 diagnostics, no per interface counters. One sensor that names the provider,
@@ -55,6 +55,17 @@ seen from outside is the same evidence.
 is kept apart from `Disconnected`: one means the traffic gets out through a
 network you have not named, the other means nothing gets out at all. It never
 guesses which line you are on to avoid admitting it cannot tell.
+
+**Nothing is lost on a restart.** The change window and the record of who
+carried what are written to disk and picked up again on start. A statistic
+that resets whenever Home Assistant does is a statistic that lies. The stretch
+that was open when Home Assistant went down keeps its provider, because the
+line is not known to have moved while nobody was watching.
+
+**Quiet when nothing happens.** The address is asked every 15 seconds, but who
+owns it is answered from a local table for 30 days, and the statistics are
+written only when a number actually moves. A line that does not switch costs
+no state writes at all: watching a quiet day does not grow your database.
 
 **One objective: watch your WAN switch.** Not bandwidth, not uptime, not
 quality of service. The question is which line is carrying the traffic right
