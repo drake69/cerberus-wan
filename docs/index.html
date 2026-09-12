@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cerberus WAN</title>
+<meta name="description" content="A Home Assistant integration that tells you which provider is carrying your traffic right now. Two DNS queries, no account, any router.">
+<meta property="og:title" content="Cerberus WAN">
+<meta property="og:description" content="Which provider is carrying your traffic right now? Two DNS queries, no account, any router.">
+<meta property="og:type" content="website">
+<style>
+:root{
+  --bg:#ffffff; --fg:#16202c; --muted:#5b6b7c; --line:#e2e8f0;
+  --card:#f7f9fb; --accent:#17476E; --accent-fg:#ffffff; --pill:#eef4fa;
+  --code-bg:#f2f5f8;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#10161d; --fg:#e8eef5; --muted:#9aabbd; --line:#243140;
+    --card:#161f29; --accent:#7FC4F2; --accent-fg:#0d1319; --pill:#1b2733;
+    --code-bg:#1a242f;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:880px; margin:0 auto; padding:0 24px}
+a{color:inherit}
+h1,h2,h3{line-height:1.2; margin:0}
+code{background:var(--code-bg); padding:.15em .4em; border-radius:4px; font-size:.9em}
+
+header{padding:88px 0 64px; border-bottom:1px solid var(--line)}
+h1{font-size:clamp(30px,5.2vw,50px); letter-spacing:-.02em; max-width:17ch}
+header p.lead{font-size:clamp(17px,2.2vw,20px); color:var(--muted); margin:22px 0 0; max-width:60ch}
+.btns{display:flex; flex-wrap:wrap; gap:12px; margin-top:34px}
+.btn{
+  display:inline-block; padding:12px 20px; border-radius:8px; text-decoration:none;
+  font-weight:600; font-size:15px; border:1px solid var(--line);
+}
+.btn-primary{background:var(--accent); color:var(--accent-fg); border-color:var(--accent)}
+.note{margin-top:16px; font-size:14px; color:var(--muted)}
+
+section{padding:56px 0; border-bottom:1px solid var(--line)}
+h2{font-size:clamp(22px,3vw,28px); letter-spacing:-.01em}
+section > p{max-width:66ch; color:var(--fg)}
+section > p.muted{color:var(--muted)}
+
+.rules{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:28px}
+.rule{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 20px}
+.rule h3{font-size:15px; letter-spacing:.01em}
+.rule p{margin:8px 0 0; font-size:14.5px; color:var(--muted)}
+
+ol.steps{max-width:66ch; padding-left:20px}
+ol.steps li{margin:14px 0}
+
+.flow{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:26px 0 0; font-size:14px}
+.flow span{background:var(--pill); border:1px solid var(--line); border-radius:999px; padding:8px 14px}
+.flow em{font-style:normal; color:var(--muted)}
+
+table{border-collapse:collapse; width:100%; margin-top:22px; font-size:15px}
+th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+th{font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600}
+
+footer{padding:48px 0 72px; color:var(--muted); font-size:14.5px}
+footer a{font-weight:600}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>Which provider is carrying your traffic right now?</h1>
+    <p class="lead">A Home Assistant integration that answers that one question,
+    on any line and behind any router. Two DNS queries and a table you write
+    yourself. No account, no API key, nothing that can be taken away.</p>
+    <div class="btns">
+      <a class="btn btn-primary" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=drake69&amp;repository=cerberus-wan&amp;category=integration">Add to HACS</a>
+      <a class="btn" href="https://github.com/drake69/cerberus-wan">View on GitHub</a>
+    </div>
+    <p class="note">Custom repository, not in the default HACS store yet. The
+    button opens it inside HACS on your own instance.</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Nothing in the house answers it</h2>
+    <p>If you have two internet connections, you are told less than you think.</p>
+    <p>The gateway integration reports the primary WAN and only that. When the
+    primary falls over, the public address it reports becomes
+    <code>0.0.0.0</code> while the house is happily browsing through the backup.
+    A speedtest names the provider but runs once a day, so it samples nothing.
+    Reading it off the latency or the first hop works, and has to be redone by
+    hand every time something changes.</p>
+    <p>Cerberus WAN asks the outside world instead of asking the router: the
+    public address as seen from outside, then who announces that address. The
+    answer is the provider whose cable the traffic is on, whatever the router
+    believes.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Eight rules</h2>
+    <p class="muted">Everything here follows from them, and anything that fights
+    them does not get built.</p>
+    <div class="rules">
+      <div class="rule"><h3>Super simple</h3><p>One thing only. No speedtest, no graphs, no diagnostics, no per interface counters.</p></div>
+      <div class="rule"><h3>No key, no service</h3><p>No account, no API key, no quota, no terms of service. There is no third party to discontinue anything.</p></div>
+      <div class="rule"><h3>No complication</h3><p>No YAML, no template to copy, no router to log into. One dialog, one field, and it opens with your network already in it.</p></div>
+      <div class="rule"><h3>Any hardware</h3><p>No OID to hunt for, no vendor API, no model specific template. The address seen from outside is the same evidence everywhere.</p></div>
+      <div class="rule"><h3>It says when it does not know</h3><p><code>Unknown</code> is an answer, not an error, and it is kept apart from <code>Disconnected</code>. It never guesses.</p></div>
+      <div class="rule"><h3>Nothing is lost on a restart</h3><p>A statistic that resets whenever Home Assistant does is a statistic that lies.</p></div>
+      <div class="rule"><h3>Quiet when nothing happens</h3><p>Values are written only when they move. Watching a quiet day does not grow your database.</p></div>
+      <div class="rule"><h3>One objective</h3><p>Watch your WAN switch. Not bandwidth, not uptime, not quality of service.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p>Two DNS queries, asked at very different rates.</p>
+    <div class="flow">
+      <span>every 15 s: what is my public address</span>
+      <em>then, only for an address never seen before</em>
+      <span>who announces it</span>
+      <em>then</em>
+      <span>your table names the provider</span>
+    </div>
+    <p style="margin-top:26px">The second answer is kept locally and reused for
+    30 days, because an address does not change owner. A lookup that failed is
+    retried within the hour, so a moment of DNS trouble does not become thirty
+    days of an unknown provider.</p>
+    <p><strong>There is no third party API.</strong> If DNS works, this works.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What you get</h2>
+    <table>
+      <tr><th>Entity</th><th>What it holds</th></tr>
+      <tr><td>the provider sensor</td><td>the name of the line in use, with the public address and the announcing network as attributes</td></tr>
+      <tr><td>one share per provider</td><td>the percentage of the recorded day that provider carried the traffic</td></tr>
+      <tr><td>changes in 24 hours</td><td>how many times the line moved, as a window that survives a restart</td></tr>
+      <tr><td>changes per hour</td><td>the same window as a moving average</td></tr>
+    </table>
+    <p style="margin-top:24px">Every switchover fires
+    <code>cerberus_wan_provider_changed</code>, and automations or scripts can
+    be hooked straight from the dialog.</p>
+  </div>
+</section>
+
+<!--
+  SCREENSHOTS: attivare questo blocco quando le immagini sono in docs/img/.
+  Attenzione: oscurare public_address nella cattura del sensore.
+
+<section>
+  <div class="wrap">
+    <h2>What it looks like</h2>
+    <figure><img src="img/sensor.png" alt="The provider sensor on a dashboard" width="880"><figcaption>The sensor names the line in use.</figcaption></figure>
+    <figure><img src="img/dialog.png" alt="The setup dialog" width="880"><figcaption>The dialog opens with your network already in the table, without a name.</figcaption></figure>
+  </div>
+</section>
+-->
+
+<section>
+  <div class="wrap">
+    <h2>Install it</h2>
+    <ol class="steps">
+      <li><a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=drake69&amp;repository=cerberus-wan&amp;category=integration">Open it in HACS</a> and download it.</li>
+      <li>Restart Home Assistant.</li>
+      <li><a href="https://my.home-assistant.io/redirect/config_flow_start/?domain=cerberus_wan">Add the integration</a>, give the network already in the table a name, and save.</li>
+    </ol>
+    <p class="muted">Home Assistant 2024.6.0 or later, and outbound DNS on port
+    53. Nothing else. Full documentation is in the
+    <a href="https://github.com/drake69/cerberus-wan#readme">README</a>.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><strong>Does this answer a question your router would not?
+    <a href="https://github.com/drake69/cerberus-wan">Leave a star.</a></strong>
+    It costs you one click and it is most of how the next person with two lines
+    finds it.</p>
+    <p>Running it on a line it was not written against? Say which network and
+    which country in an
+    <a href="https://github.com/drake69/cerberus-wan/issues">issue</a>. That is
+    the report the project most needs and cannot produce on its own.</p>
+    <p>MIT licensed. Not affiliated with or endorsed by Home Assistant.</p>
+  </div>
+</footer>
+
+</body>
+</html>
