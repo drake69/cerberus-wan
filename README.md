@@ -1,10 +1,57 @@
 # Cerberus WAN
 
-A Home Assistant sensor that tells you **which provider is carrying your traffic
-right now**.
+**Which provider is carrying your traffic right now?**
 
-Useful when you have more than one internet connection and want to know which
-one is actually in use, rather than which one your router believes is primary.
+A Home Assistant integration that answers that one question, on any line, with
+no account and no API key. Two DNS queries and a table you write yourself.
+
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=drake69&repository=cerberus-wan&category=integration)
+[![Validate](https://github.com/drake69/cerberus-wan/actions/workflows/validate.yml/badge.svg)](https://github.com/drake69/cerberus-wan/actions/workflows/validate.yml)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+
+## Why it exists
+
+If you have two internet connections, nothing already in the house tells you
+which one is actually carrying the traffic.
+
+The gateway integration reports the primary WAN and only that: when the primary
+falls over, the public address it reports becomes `0.0.0.0` while the house is
+happily browsing through the backup. A speedtest names the provider but runs
+once a day, so it samples nothing. Reading it off the latency or the first hop
+works, and has to be redone by hand every time something changes.
+
+Cerberus WAN asks the outside world instead of asking the router: the public
+address as seen from outside, then who announces that address. The answer is
+the provider whose cable the traffic is on, whatever the router believes.
+
+## Installation
+
+### HACS
+
+This integration is not in the default HACS store, so it is installed as a
+custom repository. The link below opens it directly on your instance:
+
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=drake69&repository=cerberus-wan&category=integration)
+
+Download it from there, then restart Home Assistant and add the integration:
+
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=cerberus_wan)
+
+If the link does not work, add the repository by hand: **HACS**, the menu in the
+top right, **Custom repositories**, then `drake69/cerberus-wan` with category
+**Integration**.
+
+### Manual
+
+Copy `custom_components/cerberus_wan` into your Home Assistant `config`
+directory, restart, then add the integration from **Settings**, **Devices and
+services**, **Add integration**.
+
+### First run
+
+The dialog opens with the network you are going out through already in the
+table, without a name, and a link that says whose it is. Give it a name and
+save. That is the whole setup.
 
 ## What it reports
 
@@ -132,23 +179,13 @@ as an attribute:
 
 ```
 asn: 35612
-public_address: 146.241.74.20
+public_address: 203.0.113.20
 ```
 
-## Installation
+## Requirements
 
-### HACS
-
-Add this repository as a custom repository of type "Integration", then install
-Cerberus WAN and restart Home Assistant.
-
-### Manual
-
-Copy `custom_components/cerberus_wan` into your Home Assistant `config`
-directory and restart.
-
-Then add the integration from **Settings, Devices and services, Add
-integration**.
+Home Assistant 2024.6.0 or later, and outbound DNS on port 53 to the OpenDNS
+resolvers and to `cymru.com`. Nothing else.
 
 ## Development
 
