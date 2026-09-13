@@ -15,6 +15,13 @@ no account and no API key. Two DNS queries and a table you write yourself.
 **Does this answer a question your router would not? Leave a star.** It costs
 you one click and it is most of how the next person with two lines finds it.
 
+![The Cerberus WAN sensors on a dashboard: the provider in use, the change count, the changes per hour, and one share for each line](docs/img/sensor.png)
+
+The line in use has a name, and every other sensor is about that name. Because
+the name is an ordinary state, the history comes with it:
+
+![The provider sensor opened in Home Assistant, showing the history bar and the list of switchovers with their times](docs/img/dialog.png)
+
 ## Why it exists
 
 If you have two internet connections, nothing already in the house tells you
