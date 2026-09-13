@@ -290,3 +290,7 @@ The three headed dog is built from the `dog` glyph of
 [Material Design Icons](https://pictogrammers.com/library/mdi/) by
 Pictogrammers, licensed Apache-2.0, which is also the icon the provider sensor
 carries. See [NOTICE](NOTICE).
+
+---
+
+Developed with the support of Claude Code (Anthropic).
