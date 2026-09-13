@@ -9,11 +9,24 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+import voluptuous as vol
+import voluptuous_serialize
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import config_validation as cv
 
-from custom_components.cerberus_wan import CONF_PROVIDERS, DOMAIN
-from custom_components.cerberus_wan.config_flow import CONF_PROVIDER_TABLE
+from custom_components.cerberus_wan import (
+    CONF_DISCONNECTED_LABEL,
+    CONF_PROVIDERS,
+    CONF_UNKNOWN_LABEL,
+    DOMAIN,
+)
+from custom_components.cerberus_wan.config_flow import (
+    CONF_PROVIDER_TABLE,
+    MAX_LABEL_LENGTH,
+    build_schema,
+)
 from custom_components.cerberus_wan.domain import Asn
 
 DETECT = "custom_components.cerberus_wan.config_flow.detect_network"
@@ -147,3 +160,37 @@ async def test_a_typo_does_not_keep_the_dialog_open(hass: HomeAssistant) -> None
     )
     assert created["type"] is FlowResultType.CREATE_ENTRY
     assert created["data"][CONF_PROVIDERS] == {"35612": "Eolo"}
+
+
+def test_a_label_that_would_not_fit_a_state_is_refused() -> None:
+    """A label longer than the cap never reaches the entry.
+
+    Home Assistant refuses a state over 255 characters, and a sensor whose
+    state is refused does not report an error the person can see: it just
+    stops updating. Failing on the form is the visible version of the same
+    rule.
+    """
+    schema = build_schema({})
+    with pytest.raises(vol.Invalid):
+        schema({CONF_DISCONNECTED_LABEL: "x" * (MAX_LABEL_LENGTH + 1)})
+
+
+def test_a_label_at_the_cap_still_passes() -> None:
+    """The boundary belongs to the person typing, not to the validator."""
+    schema = build_schema({})
+    validated = schema({CONF_UNKNOWN_LABEL: "x" * MAX_LABEL_LENGTH})
+    assert validated[CONF_UNKNOWN_LABEL] == "x" * MAX_LABEL_LENGTH
+
+
+def test_the_form_can_still_be_rendered() -> None:
+    """The frontend builds the dialog from a serialised schema.
+
+    A validator the serialiser cannot express would not fail a test that only
+    calls the schema in Python: it would fail as a dialog that does not open.
+    """
+    fields = voluptuous_serialize.convert(
+        build_schema({}), custom_serializer=cv.custom_serializer
+    )
+    labels = {f["name"]: f for f in fields}
+    assert labels[CONF_DISCONNECTED_LABEL]["lengthMax"] == MAX_LABEL_LENGTH
+    assert labels[CONF_UNKNOWN_LABEL]["lengthMax"] == MAX_LABEL_LENGTH

@@ -25,6 +25,12 @@ from .domain import Asn, ProviderTable
 
 CONF_PROVIDER_TABLE = "provider_table"
 
+# A label becomes the state of a sensor, and Home Assistant refuses a state
+# longer than 255 characters. Refusing it here, where the person can still see
+# the field they typed it in, beats an entity that silently fails to update.
+# Sixty-four is the length beyond which a label stops being a name.
+MAX_LABEL_LENGTH = 64
+
 
 def describe_detection(address: str | None, asn: Asn | None) -> str:
     """Render the detected line for the dialog description, as markdown.
@@ -61,11 +67,11 @@ def build_schema(defaults: dict[str, Any]) -> vol.Schema:
                 default=defaults.get(
                     CONF_DISCONNECTED_LABEL, DEFAULT_DISCONNECTED_LABEL
                 ),
-            ): str,
+            ): vol.All(str, vol.Length(max=MAX_LABEL_LENGTH)),
             vol.Optional(
                 CONF_UNKNOWN_LABEL,
                 default=defaults.get(CONF_UNKNOWN_LABEL, DEFAULT_UNKNOWN_LABEL),
-            ): str,
+            ): vol.All(str, vol.Length(max=MAX_LABEL_LENGTH)),
             vol.Optional(
                 CONF_CHANGE_TARGETS,
                 default=defaults.get(CONF_CHANGE_TARGETS, []),
