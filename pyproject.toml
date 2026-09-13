@@ -10,6 +10,7 @@ dependencies = ["dnspython>=2.6.1"]
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",
     "pytest-homeassistant-custom-component>=0.13.236",
     "ruff>=0.6",
 ]
@@ -25,3 +26,13 @@ asyncio_mode = "auto"
 [tool.ruff]
 target-version = "py313"
 line-length = 88
+
+[tool.coverage.run]
+source = ["custom_components/cerberus_wan"]
+
+[tool.coverage.report]
+# 90% is the floor the blueprint asks for, and the suite sits comfortably above
+# it. The gap that stays is infrastructure/dns.py: exercising the resolver for
+# real would test dnspython, not this integration.
+fail_under = 90
+show_missing = true
