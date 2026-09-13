@@ -155,9 +155,7 @@ async def test_two_providers_on_one_line_reach_the_entry_apart(
 async def test_a_typo_does_not_keep_the_dialog_open(hass: HomeAssistant) -> None:
     """An unreadable row costs one provider, never a form that will not close."""
     result = await open_form(hass, detected=("1.2.3.4", Asn(35612)))
-    created = await submit(
-        hass, result["flow_id"], "35612 = Eolo; nonsense; 51207 = ;"
-    )
+    created = await submit(hass, result["flow_id"], "35612 = Eolo; nonsense; 51207 = ;")
     assert created["type"] is FlowResultType.CREATE_ENTRY
     assert created["data"][CONF_PROVIDERS] == {"35612": "Eolo"}
 
