@@ -1,0 +1,26 @@
+# Pinning every action to a SHA (SECURITY blueprint 2.2) means nothing updates
+# on its own any more. This is the way back: an update arrives as a pull request
+# that CI checks, instead of arriving inside a run nobody reviewed.
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"
+
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"

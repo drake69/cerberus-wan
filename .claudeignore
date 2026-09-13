@@ -1,0 +1,15 @@
+# Secrets and credentials, never expose to an AI assistant
+.env
+.env.*
+*.token
+secrets/
+
+# Agent internals and task state
+.coding_agent/
+.sestante/
+
+# Environments and caches
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
