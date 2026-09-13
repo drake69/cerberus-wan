@@ -72,6 +72,10 @@ table{border-collapse:collapse; width:100%; margin-top:22px; font-size:15px}
 th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
 th{font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600}
 
+figure{margin:22px 0 0}
+figure img{max-width:100%; height:auto; border:1px solid var(--line); border-radius:10px; display:block}
+figcaption{margin-top:10px; color:var(--muted); font-size:14.5px}
+
 footer{padding:48px 0 72px; color:var(--muted); font-size:14.5px}
 footer a{font-weight:600}
 </style>
@@ -164,18 +168,19 @@ footer a{font-weight:600}
   </div>
 </section>
 
-<!--
-  SCREENSHOTS: attivare questo blocco quando le immagini sono in docs/img/.
-  Attenzione: oscurare public_address nella cattura del sensore.
-
 <section>
   <div class="wrap">
     <h2>What it looks like</h2>
-    <figure><img src="img/sensor.png" alt="The provider sensor on a dashboard" width="880"><figcaption>The sensor names the line in use.</figcaption></figure>
-    <figure><img src="img/dialog.png" alt="The setup dialog" width="880"><figcaption>The dialog opens with your network already in the table, without a name.</figcaption></figure>
+    <figure>
+      <img src="img/sensor.png" alt="The Cerberus WAN sensors on a dashboard: the provider in use, the change count, the changes per hour, and one share for each line" width="517" height="311">
+      <figcaption>The line in use has a name, and every other sensor is about that name: how often it changed, and how much of the day each line carried.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/dialog.png" alt="The provider sensor opened in Home Assistant, showing the history bar and the list of switchovers with their times" width="625" height="616">
+      <figcaption>Because the line is a state like any other, the history comes for free: the bar shows the day, the list gives the minute each switchover happened.</figcaption>
+    </figure>
   </div>
 </section>
--->
 
 <section>
   <div class="wrap">
