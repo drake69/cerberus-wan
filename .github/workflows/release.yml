@@ -1,0 +1,36 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The tag must match the version in the manifest
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(python3 -c "import json; print(json.load(open('custom_components/cerberus_wan/manifest.json'))['version'])")
+          test "$tag" = "$version" || { echo "tag $GITHUB_REF_NAME does not match manifest $version" >&2; exit 1; }
+
+      - name: Build the archive HACS downloads
+        run: |
+          cd custom_components/cerberus_wan
+          zip -r -X "$GITHUB_WORKSPACE/cerberus_wan.zip" . -x '*__pycache__*' '*.pyc'
+
+      # HACS extracts straight into custom_components/cerberus_wan, so a nested
+      # folder in the archive would install the integration one level too deep.
+      - name: The manifest must sit at the archive root
+        run: unzip -l cerberus_wan.zip | grep -q ' manifest.json$'
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: cerberus_wan.zip
+          generate_release_notes: true
