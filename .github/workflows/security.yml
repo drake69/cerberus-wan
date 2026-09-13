@@ -1,0 +1,66 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Same reason as the weekly run in validate.yml: a rule that changes
+    # upstream should surface here, not in the middle of a release.
+    - cron: "23 6 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  CODE_DIR: custom_components/cerberus_wan
+
+jobs:
+  bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.13"
+      - run: pip install bandit
+      - run: bandit -r "$CODE_DIR" --severity-level medium --confidence-level medium
+
+  forbidden-patterns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      # This integration resolves names and reads a table the user typed. It has
+      # no reason to reach a shell, to import a module by name at runtime, or to
+      # deserialise anything. Each of these appearing is a change of nature, not
+      # a style question, so it stops the build.
+      - name: No dangerous call may enter the integration
+        run: |
+          failed=0
+          for pattern in 'eval\s*\(' 'exec\s*\(' '__import__\s*\(' 'os\.system\s*\(' 'os\.popen\s*\(' 'subprocess'; do
+            if grep -rnE "$pattern" "$CODE_DIR" --include='*.py'; then
+              echo "::error::forbidden pattern: $pattern"
+              failed=1
+            fi
+          done
+          if grep -rnE 'import (pickle|marshal|shelve)' "$CODE_DIR" --include='*.py'; then
+            echo "::error::forbidden: unsafe deserialisation module"
+            failed=1
+          fi
+          test "$failed" -eq 0
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63  # v4.38.0
+        with:
+          languages: python
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63  # v4.38.0
+        with:
+          category: "/language:python"
