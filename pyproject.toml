@@ -12,6 +12,10 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "pytest-homeassistant-custom-component>=0.13.236",
+    # The serialiser the frontend uses to render a config flow. It arrives
+    # with Home Assistant anyway, but the test that checks the dialog can be
+    # rendered should not depend on it arriving.
+    "voluptuous-serialize>=2.6",
     "ruff>=0.6",
 ]
 

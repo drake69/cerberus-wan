@@ -1161,6 +1161,8 @@ dev = [
     { name = "pytest-homeassistant-custom-component", version = "0.13.316", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13.2' and python_full_version < '3.14.2'" },
     { name = "pytest-homeassistant-custom-component", version = "0.13.364", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14.2'" },
     { name = "ruff" },
+    { name = "voluptuous-serialize", version = "2.6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13.2'" },
+    { name = "voluptuous-serialize", version = "2.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13.2'" },
 ]
 
 [package.metadata]
@@ -1172,6 +1174,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "pytest-homeassistant-custom-component", specifier = ">=0.13.236" },
     { name = "ruff", specifier = ">=0.6" },
+    { name = "voluptuous-serialize", specifier = ">=2.6" },
 ]
 
 [[package]]
@@ -5688,11 +5691,13 @@ name = "voluptuous-serialize"
 version = "2.7.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
+    "python_full_version >= '3.14.2'",
     "python_full_version >= '3.14' and python_full_version < '3.14.2'",
     "python_full_version >= '3.13.2' and python_full_version < '3.14'",
 ]
 dependencies = [
     { name = "voluptuous", version = "0.15.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13.2' and python_full_version < '3.14.2'" },
+    { name = "voluptuous", version = "0.16.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14.2'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/53/70/03a9b61324e1bb8b16682455b8b953bccd1001a28e43478c86f539e26285/voluptuous_serialize-2.7.0.tar.gz", hash = "sha256:d0da959f2fd93c8f1eb779c5d116231940493b51020c2c1026bab76eb56cd09e", size = 9202, upload-time = "2025-08-17T10:43:04.31Z" }
 wheels = [
