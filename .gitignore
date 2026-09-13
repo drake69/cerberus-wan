@@ -12,6 +12,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
 # OS
 .DS_Store
