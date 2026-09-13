@@ -14,6 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5.4.2
+        with:
+          # Without this the runner takes the newest Python it can find, which
+          # resolves a different Home Assistant dependency set from the one
+          # people run, and changes on its own the day a new Python ships.
+          python-version: "3.13"
       - run: uv sync --all-extras --dev
       - run: uv run pytest -q --cov --cov-report=term-missing
       - run: uv run ruff check .
