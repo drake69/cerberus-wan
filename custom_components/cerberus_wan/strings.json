@@ -3,12 +3,13 @@
     "step": {
       "user": {
         "title": "Cerberus WAN",
-        "description": "Detected right now: {detected}.\n\nThe network you are going out through is already in the table below, without a name. Open the link to see who it belongs to, then type the name you want the sensor to show:\n\n`35612 = Eolo;`\n\nEvery provider is closed by a semicolon. It is needed: two providers that end up on the same line without one are read as a single provider, and the number of the second lands inside the name of the first. You do not have to add them all now: whenever the sensor shows the unknown label, reopen this dialog and the network in use, along with the ones you have been going out through lately, will be waiting here for a name. You do not have to do it while the failover is happening.\n\nOptionally pick an automation or a script to start whenever the provider changes. You can also leave this empty and trigger on the `cerberus_wan_provider_changed` event, which carries what changed.",
+        "description": "Detected right now: {detected}.\n\nThe network you are going out through is already in the table below, without a name. Open the link to see who it belongs to, then type the name you want the sensor to show:\n\n`35612 = Eolo;`\n\nEvery provider is closed by a semicolon. It is needed: two providers that end up on the same line without one are read as a single provider, and the number of the second lands inside the name of the first. You do not have to add them all now: whenever the sensor shows the unknown label, reopen this dialog and the network in use, along with the ones you have been going out through lately, will be waiting here for a name. You do not have to do it while the failover is happening.\n\nOptionally pick an automation or a script to start when the provider changes, and another for when the line drops or comes back. They are two fields on purpose: a router that renegotiates its session is not a failover, and the first field hears only about real changes of provider. You can also leave both empty and trigger on the `cerberus_wan_provider_changed` event, or on `cerberus_wan_connection_changed` to see everything. Both carry what changed.",
         "data": {
           "provider_table": "Providers",
           "disconnected_label": "Label when nothing gets out",
           "unknown_label": "Label when the provider is not in the table",
-          "change_targets": "Run when the provider changes"
+          "change_targets": "Run when the provider changes",
+          "link_targets": "Run when the line drops or comes back"
         }
       }
     }
@@ -17,12 +18,13 @@
     "step": {
       "init": {
         "title": "Cerberus WAN",
-        "description": "Detected right now: {detected}.\n\nThe networks still without a name are at the bottom of the table: the one in use first, then the ones you have gone out through in the last few weeks. The backup line can be named at leisure, long after the failover ended. Open the link to see who it belongs to, then type the name you want the sensor to show:\n\n`35612 = Eolo;`\n\nEvery provider is closed by a semicolon, so you can write after the last row without joining it to the one before. Rows that cannot be read are ignored, so a typo costs one provider and never a dialog that refuses to close.\n\nAutomations and scripts to start whenever the provider changes. Automations keep their own conditions; scripts receive the old and new provider as variables. Leaving this empty changes nothing else: the `cerberus_wan_provider_changed` event is fired either way.",
+        "description": "Detected right now: {detected}.\n\nThe networks still without a name are at the bottom of the table: the one in use first, then the ones you have gone out through in the last few weeks. The backup line can be named at leisure, long after the failover ended. Open the link to see who it belongs to, then type the name you want the sensor to show:\n\n`35612 = Eolo;`\n\nEvery provider is closed by a semicolon, so you can write after the last row without joining it to the one before. Rows that cannot be read are ignored, so a typo costs one provider and never a dialog that refuses to close.\n\nAutomations and scripts to start when the provider changes, and the ones to start when the line drops or comes back. Automations keep their own conditions; scripts receive the old and new provider as variables. The two lists are separate because a line that dropped and came back on the same provider is not a failover, and neither is a lookup that could not name the provider for a couple of minutes: the first list hears about neither. Leaving them empty changes nothing else: `cerberus_wan_provider_changed` and `cerberus_wan_connection_changed` are fired either way.",
         "data": {
           "provider_table": "Providers",
           "disconnected_label": "Label when nothing gets out",
           "unknown_label": "Label when the provider is not in the table",
-          "change_targets": "Run when the provider changes"
+          "change_targets": "Run when the provider changes",
+          "link_targets": "Run when the line drops or comes back"
         }
       }
     }

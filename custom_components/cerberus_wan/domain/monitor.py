@@ -11,6 +11,7 @@ from .label_timeline import LabelTimeline
 from .observation import Observation
 from .ports import AddressProbe, AsnRegistry, CacheStore, ChangeListener, Clock
 from .provider_table import ProviderTable
+from .transition import classify
 
 
 @dataclass(frozen=True)
@@ -75,8 +76,10 @@ class WanMonitor:
         self._listener = listener
         self._cache = AsnCache()
         self._window = ChangeWindow()
+        self._outages = ChangeWindow()
         self._timeline = LabelTimeline()
         self._current: Observation | None = None
+        self._last_resolved: Observation | None = None
 
     @property
     def current(self) -> Observation | None:
@@ -89,12 +92,26 @@ class WanMonitor:
 
     @property
     def window(self) -> ChangeWindow:
-        """Return the moving window of switchovers.
+        """Return the moving window of provider changes.
 
         Returns:
             The window this monitor has been filling.
         """
         return self._window
+
+    @property
+    def outages(self) -> ChangeWindow:
+        """Return the moving window of line interruptions.
+
+        Kept apart from the window of provider changes because the two answer
+        different questions: how often the traffic changed hands, and how often
+        the line went down. Folding them together is what made a router
+        renegotiating its session look like two failovers.
+
+        Returns:
+            The window this monitor has been filling.
+        """
+        return self._outages
 
     @property
     def timeline(self) -> LabelTimeline:
@@ -133,9 +150,22 @@ class WanMonitor:
         """Return how many times the provider changed in the last day.
 
         Returns:
-            The number of changes inside the window.
+            The number of provider changes inside the window.
         """
         return self._window.count(self._clock.now())
+
+    @property
+    def outages_last_day(self) -> int:
+        """Return how many times the line went down in the last day.
+
+        Only the moment the connection was lost is counted. The return of the
+        line is the other end of the same interruption, and counting it as well
+        would report every outage twice.
+
+        Returns:
+            The number of interruptions inside the window.
+        """
+        return self._outages.count(self._clock.now())
 
     @property
     def changes_per_hour(self) -> float:
@@ -147,11 +177,11 @@ class WanMonitor:
         return self._window.per_hour(self._clock.now())
 
     def expire_changes(self) -> bool:
-        """Drop the changes and the segments that have left the window.
+        """Drop the changes, the interruptions and the segments that aged out.
 
-        Both records are swept in one call because both are read by entities
-        of the same entry: sweeping one and not the other would publish a
-        count of the last day next to a share of something longer.
+        All three records are swept in one call because all three are read by
+        entities of the same entry: sweeping one and not the others would
+        publish a count of the last day next to a share of something longer.
 
         Returns:
             True when something was dropped, so the caller knows the published
@@ -159,8 +189,9 @@ class WanMonitor:
         """
         now = self._clock.now()
         dropped_changes = self._window.expire(now)
+        dropped_outages = self._outages.expire(now)
         dropped_segments = self._timeline.expire(now)
-        return dropped_changes or dropped_segments
+        return dropped_changes or dropped_outages or dropped_segments
 
     @property
     def cache(self) -> AsnCache:
@@ -195,8 +226,9 @@ class WanMonitor:
     async def observe(self) -> Observation:
         """Look at the network once and report what was seen.
 
-        A reading that differs from the one before it is a switchover: it is
-        noted in the window, and whoever asked to be told is told.
+        A reading whose label differs from the one before it is a movement: it
+        is classified, counted if it is worth counting, and whoever asked to be
+        told is told what kind of movement it was.
 
         Returns:
             The reading: the address, the announcing network, and the label
@@ -220,12 +252,41 @@ class WanMonitor:
             )
 
         asn = await self._asn_for(address)
+        if asn is None:
+            return Observation(
+                moment=self._clock.now(),
+                address=address,
+                asn=None,
+                label=self._held_label(),
+            )
+
         return Observation(
             moment=self._clock.now(),
             address=address,
             asn=asn,
             label=self._settings.table.label_for(asn, self._settings.unknown_label),
         )
+
+    def _held_label(self) -> str:
+        """Return what to report while it cannot be said who is carrying.
+
+        The traffic is getting out, so something is carrying it: what cannot be
+        said right now is what. Reporting the unknown label here would announce
+        a change of provider that nobody made, and it happens exactly when a
+        line has just come back on a new address, which is the moment an
+        automation hooked to a switchover must not fire. The last answer is the
+        likeliest one, so it is held until the lookup succeeds, which the short
+        retry of the address table keeps to a couple of minutes. An
+        installation that has never resolved anything has nothing to hold and
+        says so.
+
+        Returns:
+            The label of the last reading whose network was known, or the
+            unknown label when there has never been one.
+        """
+        if self._last_resolved is None:
+            return self._settings.unknown_label
+        return self._last_resolved.label
 
     async def _settle(self, observation: Observation) -> Observation:
         """Keep the reading, and act on it when it is a change.
@@ -240,12 +301,32 @@ class WanMonitor:
         self._current = observation
         self._timeline.record(observation.moment, observation.label)
         if not observation.follows(previous):
+            self._remember_resolved(observation)
             return observation
 
-        self._window.record(observation.moment)
+        transition = classify(previous, observation, self._last_resolved)
+        self._remember_resolved(observation)
+
+        if transition.is_provider_change:
+            self._window.record(observation.moment)
+        if transition.is_outage:
+            self._outages.record(observation.moment)
         if self._listener is not None:
-            await self._listener.provider_changed(previous, observation)
+            await self._listener.changed(transition)
         return observation
+
+    def _remember_resolved(self, observation: Observation) -> None:
+        """Keep the reading as the baseline, when it has a network to be one.
+
+        The baseline has to survive the readings that carry no network,
+        otherwise a failover that happens while the line is down has nothing to
+        be compared against and reads as a line coming back.
+
+        Args:
+            observation: the reading just taken.
+        """
+        if observation.resolved:
+            self._last_resolved = observation
 
     async def _asn_for(self, address: str) -> Asn | None:
         """Return who announces an address, asking only when it is not known.

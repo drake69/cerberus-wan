@@ -146,8 +146,9 @@ footer a{font-weight:600}
     </div>
     <p style="margin-top:26px">The second answer is kept locally and reused for
     30 days, because an address does not change owner. A lookup that failed is
-    retried within the hour, so a moment of DNS trouble does not become thirty
-    days of an unknown provider.</p>
+    retried after a couple of minutes, so a moment of DNS trouble does not become
+    thirty days of an unknown provider. Until it answers, the sensor keeps
+    showing the provider it was on rather than inventing a change.</p>
     <p><strong>There is no third party API.</strong> If DNS works, this works.</p>
   </div>
 </section>
@@ -159,12 +160,17 @@ footer a{font-weight:600}
       <tr><th>Entity</th><th>What it holds</th></tr>
       <tr><td>the provider sensor</td><td>the name of the line in use, with the public address and the announcing network as attributes</td></tr>
       <tr><td>one share per provider</td><td>the percentage of the recorded day that provider carried the traffic</td></tr>
-      <tr><td>changes in 24 hours</td><td>how many times the line moved, as a window that survives a restart</td></tr>
+      <tr><td>changes in 24 hours</td><td>how many times the provider changed, as a window that survives a restart</td></tr>
       <tr><td>changes per hour</td><td>the same window as a moving average</td></tr>
+      <tr><td>outages in 24 hours</td><td>how many times the line went down, counted apart from the changes of provider</td></tr>
     </table>
-    <p style="margin-top:24px">Every switchover fires
-    <code>cerberus_wan_provider_changed</code>, and automations or scripts can
-    be hooked straight from the dialog.</p>
+    <p style="margin-top:24px">A change of provider fires
+    <code>cerberus_wan_provider_changed</code> and nothing else does, so an
+    automation hooked to a failover hears about failovers. A line that dropped
+    and came back on the same provider is not one: it fires
+    <code>cerberus_wan_connection_changed</code>, which carries every movement.
+    Automations and scripts can be hooked to either, straight from the
+    dialog.</p>
   </div>
 </section>
 

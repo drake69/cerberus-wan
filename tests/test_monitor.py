@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from domain import MonitorSettings, ProviderTable, WanMonitor
-from domain.asn_cache import REFRESH
+from domain.asn_cache import REFRESH, RETRY
 from fakes import FakeListener, FakeProbe, FakeRegistry, FakeStore, FrozenClock
 
 MOMENT = datetime(2026, 9, 9, 12, 0, tzinfo=UTC)
@@ -204,13 +204,19 @@ async def test_a_change_leaves_the_window_after_a_day() -> None:
     assert rig.monitor.changes_last_day == 0
 
 
-async def test_losing_the_line_is_a_change_like_any_other() -> None:
-    """Falling off the network is exactly what somebody wants counted."""
+async def test_losing_the_line_is_counted_as_an_outage_and_not_a_change() -> None:
+    """Falling off the network handed the traffic to nobody.
+
+    It is still worth counting, which is what the other window is for. What it
+    is not is a change of provider, and counting it as one is what made a line
+    that dropped for a minute read as a failover.
+    """
     rig = build("1.2.3.4", {"1.2.3.4": 35612}, ProviderTable({"35612": "Eolo"}))
     await rig.observe()
     rig.probe.address = None
     await rig.observe()
-    assert rig.monitor.changes_last_day == 1
+    assert rig.monitor.changes_last_day == 0
+    assert rig.monitor.outages_last_day == 1
     assert rig.monitor.current.label == "Disconnected"
 
 
@@ -221,7 +227,8 @@ async def test_the_listener_hears_a_switchover() -> None:
     await rig.observe()
     rig.probe.address = "5.6.7.8"
     await rig.observe()
-    assert rig.listener.heard == [("Eolo", "Iliad")]
+    assert rig.listener.labels == [("Eolo", "Iliad")]
+    assert rig.listener.kinds == ["provider"]
 
 
 async def test_the_listener_is_not_told_about_the_first_reading() -> None:
@@ -295,3 +302,136 @@ async def test_the_sweep_drops_segments_that_left_the_day() -> None:
     rig.clock.moment = MOMENT + timedelta(hours=48)
     assert rig.monitor.expire_changes()
     assert rig.monitor.share_of("Iliad") == 100.0
+
+
+async def test_a_line_that_comes_back_on_the_same_provider_is_no_failover() -> None:
+    """The case this whole distinction exists for.
+
+    A router renegotiating its session drops, comes back on a fresh address,
+    and is the provider it always was. Reporting that as a change of provider,
+    twice, is what made an automation hooked to a failover announce two
+    failovers that never happened.
+    """
+    known = {"1.2.3.4": 35612, "1.2.3.9": 35612}
+    rig = build("1.2.3.4", known, ProviderTable({"35612": "Eolo"}))
+    await rig.observe()
+    rig.probe.address = None
+    await rig.observe()
+    rig.probe.address = "1.2.3.9"
+    await rig.observe()
+
+    assert rig.monitor.current.label == "Eolo"
+    assert rig.monitor.changes_last_day == 0
+    assert rig.monitor.outages_last_day == 1
+    assert rig.listener.kinds == ["link", "link"]
+
+
+async def test_a_failover_that_happens_while_the_line_is_down_is_a_failover() -> None:
+    """Skipping the gap must not cost the real case.
+
+    The provider is compared against the last reading that had one, not against
+    the reading before, precisely so that Eolo, disconnected, Iliad still reads
+    as Eolo giving way to Iliad.
+    """
+    known = {"1.2.3.4": 35612, "5.6.7.8": 51207}
+    table = ProviderTable({"35612": "Eolo", "51207": "Iliad"})
+    rig = build("1.2.3.4", known, table)
+    await rig.observe()
+    rig.probe.address = None
+    await rig.observe()
+    rig.probe.address = "5.6.7.8"
+    await rig.observe()
+
+    assert rig.monitor.current.label == "Iliad"
+    assert rig.monitor.changes_last_day == 1
+    assert rig.monitor.outages_last_day == 1
+    assert rig.listener.kinds == ["link", "provider"]
+
+
+async def test_the_return_of_the_line_is_not_a_second_outage() -> None:
+    """One interruption has two ends and is counted at one of them."""
+    known = {"1.2.3.4": 35612, "1.2.3.9": 35612}
+    rig = build("1.2.3.4", known, ProviderTable({"35612": "Eolo"}))
+    await rig.observe()
+    rig.probe.address = None
+    await rig.observe()
+    rig.probe.address = "1.2.3.9"
+    await rig.observe()
+    assert rig.monitor.outages_last_day == 1
+
+
+async def test_an_outage_leaves_the_window_after_a_day() -> None:
+    """The interruptions are a moving day too, not a total that only grows."""
+    rig = build("1.2.3.4", {"1.2.3.4": 35612}, ProviderTable({"35612": "Eolo"}))
+    await rig.observe()
+    rig.probe.address = None
+    await rig.observe()
+    rig.clock.moment = MOMENT + timedelta(hours=25)
+    assert rig.monitor.expire_changes() is True
+    assert rig.monitor.outages_last_day == 0
+
+
+async def test_an_address_that_cannot_be_resolved_holds_the_last_provider() -> None:
+    """Traffic is getting out, so somebody is carrying it.
+
+    Reporting the unknown label here would announce a change that nobody made,
+    at the worst possible moment: a line that has just come back on an address
+    nobody has resolved yet.
+    """
+    rig = build("1.2.3.4", {"1.2.3.4": 35612}, ProviderTable({"35612": "Eolo"}))
+    await rig.observe()
+    rig.probe.address = "1.2.3.9"
+    observation = await rig.observe()
+
+    assert observation.label == "Eolo"
+    assert observation.asn is None
+    assert not observation.resolved
+    assert observation.connected
+    assert rig.monitor.changes_last_day == 0
+    assert rig.listener.heard == []
+
+
+async def test_the_held_provider_gives_way_once_the_lookup_answers() -> None:
+    """Holding is provisional: the answer wins, and then it is a change."""
+    table = ProviderTable({"35612": "Eolo", "51207": "Iliad"})
+    rig = build("1.2.3.4", {"1.2.3.4": 35612}, table)
+    await rig.observe()
+    rig.probe.address = "5.6.7.8"
+    assert (await rig.observe()).label == "Eolo"
+
+    rig.registry.known["5.6.7.8"] = 51207
+    rig.clock.moment = MOMENT + RETRY + timedelta(seconds=1)
+    observation = await rig.observe()
+
+    assert observation.label == "Iliad"
+    assert rig.monitor.changes_last_day == 1
+    assert rig.listener.kinds == ["provider"]
+
+
+async def test_an_unresolved_address_is_asked_again_within_minutes() -> None:
+    """Holding the last answer is only tolerable while it stays brief."""
+    rig = build("1.2.3.4")
+    await rig.observe()
+    rig.clock.moment = MOMENT + RETRY + timedelta(seconds=1)
+    await rig.observe()
+    assert rig.registry.asked == ["1.2.3.4", "1.2.3.4"]
+
+
+async def test_nothing_is_held_before_any_provider_has_been_resolved() -> None:
+    """An installation with no answer yet has nothing to hold, and says so."""
+    rig = build("1.2.3.4")
+    observation = await rig.observe()
+    assert observation.label == "Unknown"
+    assert not observation.resolved
+
+
+async def test_the_first_answer_after_a_dark_start_is_not_a_failover() -> None:
+    """Starting with the line down leaves nothing to compare against."""
+    rig = build(None, {"1.2.3.4": 35612}, ProviderTable({"35612": "Eolo"}))
+    await rig.observe()
+    rig.probe.address = "1.2.3.4"
+    await rig.observe()
+
+    assert rig.monitor.current.label == "Eolo"
+    assert rig.monitor.changes_last_day == 0
+    assert rig.listener.kinds == ["link"]

@@ -110,17 +110,34 @@ class FakeStore:
 
 
 class FakeListener:
-    """A listener that records the switchovers it was told about."""
+    """A listener that records the movements it was told about."""
 
     def __init__(self) -> None:
         """Start with nothing heard."""
-        self.heard: list[tuple[str, str]] = []
+        self.heard: list = []
 
-    async def provider_changed(self, previous, current) -> None:
-        """Record a switchover.
+    async def changed(self, transition) -> None:
+        """Record a movement of the reported provider.
 
         Args:
-            previous: the reading before the change.
-            current: the reading that is the change.
+            transition: what moved, and what kind of movement it was.
         """
-        self.heard.append((previous.label, current.label))
+        self.heard.append(transition)
+
+    @property
+    def labels(self) -> list[tuple[str, str]]:
+        """Return what was heard as pairs of labels.
+
+        Returns:
+            One pair per movement, the label before and the label after.
+        """
+        return [(t.previous.label, t.current.label) for t in self.heard]
+
+    @property
+    def kinds(self) -> list[str]:
+        """Return what kind each movement heard was.
+
+        Returns:
+            One name per movement, in the order they were told.
+        """
+        return [t.kind.value for t in self.heard]

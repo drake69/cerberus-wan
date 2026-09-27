@@ -13,7 +13,9 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.cerberus_wan import (
+    CONF_CHANGE_TARGETS,
     CONF_DISCONNECTED_LABEL,
+    CONF_LINK_TARGETS,
     CONF_PROVIDERS,
     CONF_UNKNOWN_LABEL,
     DOMAIN,
@@ -117,3 +119,38 @@ async def test_naming_the_backup_reaches_the_options(hass: HomeAssistant) -> Non
     )
     assert saved["type"] is FlowResultType.CREATE_ENTRY
     assert saved["data"][CONF_PROVIDERS] == {"35612": "Eolo", "51207": "Iliad"}
+
+
+async def test_the_two_lists_of_targets_are_saved_apart(
+    hass: HomeAssistant,
+) -> None:
+    """The dialog is where the distinction becomes something a person can set.
+
+    Telling a failover from a line that dropped is worth nothing if both still
+    start the same automation, so the two lists have to reach the entry as two.
+    """
+    entry = make_entry(hass, {"35612": "Eolo"})
+    result = await open_options(hass, entry, detected=("1.2.3.4", Asn(35612)))
+    saved = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_PROVIDER_TABLE: "35612 = Eolo;",
+            CONF_CHANGE_TARGETS: ["script.on_failover"],
+            CONF_LINK_TARGETS: ["script.on_line_down"],
+        },
+    )
+    assert saved["data"][CONF_CHANGE_TARGETS] == ["script.on_failover"]
+    assert saved["data"][CONF_LINK_TARGETS] == ["script.on_line_down"]
+
+
+async def test_the_dialog_reopens_on_what_was_already_hooked(
+    hass: HomeAssistant,
+) -> None:
+    """Reopening it to add a provider must not silently clear the targets."""
+    entry = make_entry(hass, {"35612": "Eolo"})
+    hass.config_entries.async_update_entry(
+        entry, options={CONF_LINK_TARGETS: ["script.on_line_down"]}
+    )
+    result = await open_options(hass, entry, detected=("1.2.3.4", Asn(35612)))
+    defaults = {key.schema: key.default() for key in result["data_schema"].schema}
+    assert defaults[CONF_LINK_TARGETS] == ["script.on_line_down"]

@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Protocol
 
 from .asn import Asn
-from .observation import Observation
+from .transition import Transition
 
 
 class AddressProbe(Protocol):
@@ -60,16 +60,17 @@ class CacheStore(Protocol):
 
 
 class ChangeListener(Protocol):
-    """Told when the provider changes, and free to do anything with it."""
+    """Told when the reported provider moves, and free to do anything with it."""
 
-    async def provider_changed(
-        self, previous: Observation, current: Observation
-    ) -> None:
-        """React to a switchover.
+    async def changed(self, transition: Transition) -> None:
+        """React to a movement of the reported provider.
+
+        Told about every movement and not only about a provider change: what to
+        do with a line that dropped is a decision for whoever implements this,
+        not for the model, and the movement says which kind it is.
 
         Args:
-            previous: the reading before the change.
-            current: the reading that is the change.
+            transition: what moved, and what kind of movement it was.
         """
 
 

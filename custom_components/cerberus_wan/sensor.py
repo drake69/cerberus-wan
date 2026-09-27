@@ -107,6 +107,7 @@ async def async_setup_entry(
         ProviderSensor(coordinator, entry),
         ChangeCountSensor(coordinator, entry),
         ChangeRateSensor(coordinator, entry),
+        OutageCountSensor(coordinator, entry),
     ]
     entities += [
         ShareSensor(coordinator, entry, label) for label in monitor.settings.labels
@@ -208,17 +209,27 @@ class ProviderSensor(CerberusEntity, RestoreEntity):
     def extra_state_attributes(self) -> dict:
         """Return the evidence behind the label, and the reach of the shares.
 
+        `asn_resolved` is false whenever the number next to it is missing, and
+        it is the one attribute worth reading when the state looks odd: a
+        provider name shown with no number is the last known name being held
+        because the lookup has not answered yet, which happens for a couple of
+        minutes after a line comes back on a new address. The state is a
+        statement about who is carrying the traffic; this says how firmly it is
+        known.
+
         Returns:
-            The public address, the announcing autonomous system number, and
-            how many hours of record the share sensors are speaking for. The
-            last one belongs here rather than on each share: it is a fact
-            about the installation, and this entity is the one that writes on
-            every cycle anyway.
+            The public address, the announcing autonomous system number,
+            whether that number is known right now, and how many hours of
+            record the share sensors are speaking for. The last one belongs
+            here rather than on each share: it is a fact about the
+            installation, and this entity is the one that writes on every cycle
+            anyway.
         """
         asn = self.observation.asn
         return {
             "public_address": self.observation.address,
             "asn": asn.number if asn else None,
+            "asn_resolved": self.observation.resolved,
             "covered_hours": self.monitor.covered_hours,
         }
 
@@ -384,7 +395,12 @@ class StoredWindow(ExtraStoredData):
 
 
 class ChangeCountSensor(StatisticEntity, RestoreEntity):
-    """How many times the provider changed in the last twenty four hours."""
+    """How many times the provider changed in the last twenty four hours.
+
+    Changes of provider, and nothing else: a line that dropped and came back on
+    the same provider is counted by the outage sensor instead, and a lookup that
+    could not name the provider for a couple of minutes is counted nowhere.
+    """
 
     _attr_name = "Changes in 24 hours"
     _attr_native_unit_of_measurement = "changes"
@@ -477,3 +493,78 @@ class ChangeRateSensor(StatisticEntity):
             The count over the window, divided by the width of the window.
         """
         return self.monitor.changes_per_hour
+
+
+class OutageCountSensor(StatisticEntity, RestoreEntity):
+    """How many times the line went down in the last twenty four hours.
+
+    The companion of the change count, and the reason that one can be narrow. A
+    router that renegotiates its session, or an upstream that resets it
+    overnight, is an event worth seeing and is not a failover: it belongs to a
+    number of its own rather than inflating the count of switchovers.
+
+    Only the moment the connection is lost is counted. The return is the other
+    end of the same interruption.
+    """
+
+    _attr_name = "Outages in 24 hours"
+    _attr_native_unit_of_measurement = "outages"
+    _attr_icon = "mdi:lan-disconnect"
+
+    def __init__(self, coordinator: NetworkCoordinator, entry: ConfigEntry) -> None:
+        """Name the entity after what it counts.
+
+        Args:
+            coordinator: the shared polling loop.
+            entry: the config entry this entity belongs to.
+        """
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_outages_24h"
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of interruptions inside the window.
+
+        Returns:
+            The count over the last twenty four hours.
+        """
+        return self.monitor.outages_last_day
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return what the count alone does not say.
+
+        Returns:
+            When the line last went down, and how wide the window is.
+        """
+        window = self.monitor.outages
+        last = window.last
+        return {
+            "last_outage": last.isoformat() if last else None,
+            "window_hours": round(window.window.total_seconds() / 3600),
+        }
+
+    @property
+    def extra_restore_state_data(self) -> StoredWindow:
+        """Return the window to keep across a restart.
+
+        Returns:
+            The moments currently held.
+        """
+        return StoredWindow(self.monitor.outages.to_list())
+
+    async def async_added_to_hass(self) -> None:
+        """Take back the interruptions this entity was holding before a restart.
+
+        The same reason the change count does it: a statistic of the last day
+        that empties whenever Home Assistant restarts is a statistic that lies.
+        """
+        await super().async_added_to_hass()
+        stored = await self.async_get_last_extra_data()
+        if stored is None:
+            return
+        self.monitor.outages.adopt(
+            ChangeWindow.from_list(stored.as_dict().get("moments"))
+        )
+        self.monitor.expire_changes()
+        self.async_write_ha_state()

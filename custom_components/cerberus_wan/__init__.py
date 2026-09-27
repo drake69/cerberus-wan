@@ -15,11 +15,23 @@ CONF_PROVIDERS = "providers"
 CONF_DISCONNECTED_LABEL = "disconnected_label"
 CONF_UNKNOWN_LABEL = "unknown_label"
 CONF_CHANGE_TARGETS = "change_targets"
+CONF_LINK_TARGETS = "link_targets"
 
-# Fired on every switchover, whether or not anything was hooked to it. It
-# carries what changed, which a service call cannot, so an automation that
-# needs to know where the traffic went triggers on this instead.
+# Fired when the network announcing the traffic is not the one that announced
+# it before, whether or not anything was hooked to it. It carries what changed,
+# which a service call cannot, so an automation that needs to know where the
+# traffic went triggers on this instead.
+#
+# It is deliberately narrow. A line that drops and comes back on the same
+# provider does not fire it, and neither does a lookup that failed to name the
+# provider for a couple of minutes: both used to, and an automation hooked to
+# a failover was announcing failovers that never happened.
 EVENT_PROVIDER_CHANGED = f"{DOMAIN}_provider_changed"
+
+# Fired on every movement of the reported provider, the line dropping and
+# coming back included. This is the one to trigger on to see everything; the
+# `kind` it carries says which of them it was.
+EVENT_CONNECTION_CHANGED = f"{DOMAIN}_connection_changed"
 
 # Both defaults are plain English because the repository is English. They are
 # user facing values, so whoever installs the integration overrides them in

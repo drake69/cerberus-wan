@@ -14,6 +14,7 @@ from .monitor import MonitorSettings, WanMonitor
 from .observation import Observation
 from .ports import AddressProbe, AsnRegistry, CacheStore, ChangeListener, Clock
 from .provider_table import ProviderTable
+from .transition import ChangeKind, Transition, classify
 
 __all__ = [
     "AddressProbe",
@@ -22,6 +23,7 @@ __all__ = [
     "AsnRegistry",
     "CacheEntry",
     "CacheStore",
+    "ChangeKind",
     "ChangeListener",
     "ChangeWindow",
     "Clock",
@@ -29,5 +31,7 @@ __all__ = [
     "MonitorSettings",
     "Observation",
     "ProviderTable",
+    "Transition",
     "WanMonitor",
+    "classify",
 ]

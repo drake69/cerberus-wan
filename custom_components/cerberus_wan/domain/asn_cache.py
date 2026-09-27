@@ -19,11 +19,18 @@ from .asn import Asn
 # nothing and saves every lookup in between.
 REFRESH = timedelta(days=30)
 
-# A lookup that failed is retried within the hour instead. Without this the
-# failure would either be retried on every cycle, which is the hot loop the
-# table exists to avoid, or be trusted for a month, which would turn a moment
-# of DNS trouble into thirty days of an unknown provider.
-RETRY = timedelta(hours=1)
+# A lookup that failed is retried after a couple of minutes instead. Without
+# this the failure would either be retried on every cycle, which is the hot
+# loop the table exists to avoid, or be trusted for a month, which would turn a
+# moment of DNS trouble into thirty days of an unknown provider.
+#
+# Two minutes and not an hour because of when this failure actually happens:
+# right after the line comes back, on a brand new address, when the query
+# leaves before the path to the outside is properly up again. The reading in
+# that state carries the previous answer, so the length of the retry is the
+# length of time a stale provider name can be shown. Eight cycles of holding is
+# a glitch; an hour of it is a wrong answer.
+RETRY = timedelta(minutes=2)
 
 # An address not seen for two months is forgotten. Coming back costs one
 # lookup, which is cheaper than carrying every address ever held.

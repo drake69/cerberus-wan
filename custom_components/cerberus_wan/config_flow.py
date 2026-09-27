@@ -13,6 +13,7 @@ from homeassistant.helpers import selector
 from . import (
     CONF_CHANGE_TARGETS,
     CONF_DISCONNECTED_LABEL,
+    CONF_LINK_TARGETS,
     CONF_PROVIDERS,
     CONF_UNKNOWN_LABEL,
     DEFAULT_DISCONNECTED_LABEL,
@@ -80,6 +81,14 @@ def build_schema(defaults: dict[str, Any]) -> vol.Schema:
                     domain=["automation", "script"], multiple=True
                 )
             ),
+            vol.Optional(
+                CONF_LINK_TARGETS,
+                default=defaults.get(CONF_LINK_TARGETS, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["automation", "script"], multiple=True
+                )
+            ),
         }
     )
 
@@ -101,6 +110,7 @@ def to_entry_payload(user_input: dict[str, Any]) -> dict[str, Any]:
         ),
         CONF_UNKNOWN_LABEL: user_input.get(CONF_UNKNOWN_LABEL, DEFAULT_UNKNOWN_LABEL),
         CONF_CHANGE_TARGETS: user_input.get(CONF_CHANGE_TARGETS, []),
+        CONF_LINK_TARGETS: user_input.get(CONF_LINK_TARGETS, []),
     }
 
 
@@ -186,6 +196,9 @@ class CerberusWanOptionsFlow(OptionsFlow):
                     CONF_UNKNOWN_LABEL: settings.unknown_label,
                     CONF_CHANGE_TARGETS: setting(
                         self.config_entry, CONF_CHANGE_TARGETS, []
+                    ),
+                    CONF_LINK_TARGETS: setting(
+                        self.config_entry, CONF_LINK_TARGETS, []
                     ),
                 }
             ),

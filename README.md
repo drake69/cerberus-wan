@@ -116,21 +116,33 @@ save. That is the whole setup.
 |---|---|
 | The provider label you configured | the announcing network matched a row in your table |
 | `Disconnected` | nothing gets out |
-| `Unknown` | traffic gets out, but the announcing network is not in your table |
+| `Unknown` | traffic gets out, the announcing network was resolved, and it is not in your table |
 
-`Unknown` is a first class answer, not an error. It is the honest state when the
-integration cannot tell, and it is deliberately distinct from `Disconnected`.
+`Unknown` is a first class answer, not an error. It is the honest state when
+nobody has named that network yet, and it is deliberately distinct from
+`Disconnected`.
 
 Both labels are configurable, so you can phrase them in your own language.
+
+There is a fourth situation, and it has no label of its own: traffic gets out,
+but the lookup that says who is carrying it has not answered. That happens for a
+couple of minutes after a line comes back on a fresh address, when the query
+leaves before the path outwards is properly up. The sensor then **keeps showing
+the provider it was on** and sets `asn_resolved` to `false` beside the missing
+number. A provider name with no number next to it is a name being held, not a
+measurement. Showing `Unknown` there, as versions before 0.5.0 did, announced a
+change of provider that nobody had made, at the exact moment an automation
+watching for a failover must not fire.
 
 ## The entities
 
 | Entity | What it holds |
 |---|---|
-| the provider sensor | the label of the network in use, with the address and the ASN as attributes |
+| the provider sensor | the label of the network in use, with the address, the ASN, and `asn_resolved` as attributes |
 | one share sensor per label | the percentage of the recorded day that provider carried the traffic, with an `active` attribute saying whether it is carrying right now |
-| `Changes in 24 hours` | how many times the provider changed in the last 24 hours, as a moving window |
+| `Changes in 24 hours` | how many times the **provider** changed in the last 24 hours, as a moving window |
 | `Changes per hour` | the same window divided by its width: the moving average of switchovers per hour |
+| `Outages in 24 hours` | how many times the **line went down** in the last 24 hours, over its own moving window |
 
 The shares are percentages of what is on the record, not of the wall clock. An
 installation running for two hours can only speak for those two hours, so the
@@ -146,20 +158,38 @@ whenever Home Assistant does is a statistic that lies. The segment that was
 open when Home Assistant went down keeps its label, because the line is not
 known to have moved while nobody was watching.
 
-Losing the line counts as a change, because it is one, and the time spent
-disconnected is a share like any other.
+The two counts are separate on purpose, and the separation is the point of
+release 0.5.0. A line that drops and comes back on the provider it was already
+on is an interruption and no failover at all: it moves `Outages in 24 hours` and
+leaves `Changes in 24 hours` alone. A failover that happens while the line is
+down is still a failover, because the provider is compared against the last
+reading that had one and not against the gap: `Eolo`, `Disconnected`, `Iliad`
+counts one outage and one change of provider. Time spent disconnected is a share
+like any other.
 
 ## Reacting to a change
 
 Two ways, and you can use either or both.
 
-**Pick an automation or a script in the dialog.** The field accepts both, and
-several of each. An automation is triggered with its own conditions still in
-force, so one that says "only at night" still means it. A script receives what
-changed as variables.
+**Pick an automation or a script in the dialog.** There are two fields, and the
+one you fill in decides what starts it:
 
-**Or trigger on the event.** Every switchover fires
-`cerberus_wan_provider_changed`, whether or not anything was hooked to it:
+| Field | Starts on |
+|---|---|
+| Run when the provider changes | the network carrying the traffic is not the one that was carrying it before |
+| Run when the line drops or comes back | the connection was lost, or came back |
+
+Both accept automations and scripts, and several of each. An automation is
+triggered with its own conditions still in force, so one that says "only at
+night" still means it. A script receives what changed as variables.
+
+**Or trigger on an event.** Two are fired, whether or not anything is hooked to
+them:
+
+| Event | Fired on |
+|---|---|
+| `cerberus_wan_provider_changed` | a change of provider, and nothing else |
+| `cerberus_wan_connection_changed` | every movement of the sensor, that one included |
 
 ```yaml
 trigger:
@@ -171,9 +201,17 @@ action:
       message: "Now on {{ trigger.event.data.label }}, was {{ trigger.event.data.previous_label }}"
 ```
 
-The event carries `previous_label`, `label`, `public_address`, `asn`,
-`changed_at` and `entry_id`. Use it when the automation needs to know where the
-traffic went; use the field when it just needs to run.
+Both carry `kind`, `previous_label`, `label`, `previous_asn`, `asn`,
+`public_address`, `changed_at` and `entry_id`. `kind` is `provider`, `link` or
+`unresolved`; on `cerberus_wan_provider_changed` it is always `provider`. Use an
+event when the automation needs to know where the traffic went; use a field when
+it just needs to run.
+
+**Prefer either of those to a trigger on the state of the sensor.** A state
+trigger also fires on `unavailable`, which Home Assistant sets by itself while
+an integration is starting, reloading or being restarted, and no integration can
+stop it doing so. That is where a notification of a failover "from Unavailable"
+comes from. Neither event has that problem and neither needs a filter.
 
 **An automation attached this way does not show up under "Related".** That card
 lists automations, scripts and scenes whose own configuration names this
@@ -182,7 +220,7 @@ nothing about Cerberus WAN, it is Cerberus WAN that calls it, and the link
 lives in the integration options. An automation triggered on the event is
 invisible there too, since an event trigger names no entity. Only one that
 triggers on the state of the provider sensor appears in that card. To see what
-is attached, reopen the dialog: the field holds the list.
+is attached, reopen the dialog: the two fields hold the lists.
 
 ## How it works
 
@@ -197,9 +235,11 @@ Two DNS queries, asked at very different rates:
 The answer to the second question is kept in a local table, alongside the date
 it was obtained, and reused for **30 days**. An address does not change owner,
 so asking again on every cycle would be four identical questions a minute for
-an answer that holds for months. A lookup that failed is retried within the
-hour instead, so a moment of DNS trouble does not become thirty days of an
-unknown provider.
+an answer that holds for months. A lookup that failed is retried after a couple
+of minutes instead, so a moment of DNS trouble does not become thirty days of an
+unknown provider. Those couple of minutes are also how long the sensor can go on
+showing a held provider name, which is what keeps the retry short: the length of
+the retry is the length of time a stale answer can be on display.
 
 The table lives in the Home Assistant storage directory and survives a restart.
 Addresses not seen for 60 days are dropped from it.
@@ -264,7 +304,7 @@ uv run ruff check .
 ### Layout
 
 ```
-domain/          the model: Asn, ProviderTable, Observation, WanMonitor, ports
+domain/          the model: Asn, ProviderTable, Observation, Transition, WanMonitor, ports
 infrastructure/  the adapters: DNS lookups, the system clock
 assembly.py      the composition root: entry in, wired monitor out
 sensor.py        Home Assistant entities, thin

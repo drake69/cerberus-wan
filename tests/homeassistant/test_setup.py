@@ -37,6 +37,7 @@ async def test_the_provider_sensor_publishes_the_evidence(
     state = hass.states.get(PROVIDER_SENSOR)
     assert state.attributes["asn"] == 35612
     assert state.attributes["public_address"] == "9.9.9.9"
+    assert state.attributes["asn_resolved"] is True
 
 
 async def test_an_unmapped_network_is_reported_as_unknown(
@@ -57,6 +58,22 @@ async def test_a_dead_line_is_reported_as_disconnected(
     state = hass.states.get(PROVIDER_SENSOR)
     assert state.state == "Disconnected"
     assert state.attributes["asn"] is None
+
+
+async def test_an_unresolvable_address_says_so_on_a_fresh_install(
+    hass: HomeAssistant, entry, start
+) -> None:
+    """Traffic is getting out and there is no earlier answer to fall back on.
+
+    The label can only be the unknown one here, and what tells this apart from a
+    network nobody named is the attribute: there, the number is known and only
+    the name is missing.
+    """
+    await start(entry, address="9.9.9.9", asn=None)
+    state = hass.states.get(PROVIDER_SENSOR)
+    assert state.state == "Unknown"
+    assert state.attributes["asn"] is None
+    assert state.attributes["asn_resolved"] is False
 
 
 async def test_one_share_sensor_per_label(hass: HomeAssistant, entry, start) -> None:
@@ -106,6 +123,7 @@ async def test_the_statistics_start_from_an_empty_window(
     await start(entry, asn=35612)
     assert hass.states.get("sensor.cerberus_wan_changes_in_24_hours").state == "0"
     assert hass.states.get("sensor.cerberus_wan_changes_per_hour").state == "0.0"
+    assert hass.states.get("sensor.cerberus_wan_outages_in_24_hours").state == "0"
 
 
 async def test_the_entry_unloads_cleanly(hass: HomeAssistant, entry, start) -> None:

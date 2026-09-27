@@ -26,6 +26,19 @@ class Observation:
         """
         return self.address is not None
 
+    @property
+    def resolved(self) -> bool:
+        """Report whether the network announcing the traffic is known.
+
+        False covers two different situations, which `connected` tells apart:
+        nothing gets out at all, and something gets out but who carries it
+        could not be determined.
+
+        Returns:
+            True when the registry answered.
+        """
+        return self.asn is not None
+
     def follows(self, previous: Observation | None) -> bool:
         """Report whether this reading is a change of provider.
 

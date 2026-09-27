@@ -24,6 +24,7 @@ from pytest_homeassistant_custom_component.common import (
 PROVIDER_SENSOR = "sensor.cerberus_wan"
 CHANGES_SENSOR = "sensor.cerberus_wan_changes_in_24_hours"
 RATE_SENSOR = "sensor.cerberus_wan_changes_per_hour"
+OUTAGES_SENSOR = "sensor.cerberus_wan_outages_in_24_hours"
 
 SCAN_INTERVAL = timedelta(seconds=15)
 
@@ -62,6 +63,20 @@ def restore(hass: HomeAssistant, moments: list[str]) -> None:
     mock_restore_cache_with_extra_data(
         hass,
         ((State(CHANGES_SENSOR, str(len(moments))), {"moments": moments}),),
+    )
+
+
+def restore_outages(hass: HomeAssistant, moments: list[str]) -> None:
+    """Pretend the entity was holding these interruptions before the restart.
+
+    Args:
+        hass: the running Home Assistant instance.
+        moments: the stored interruptions, as the entity would have written
+            them.
+    """
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(OUTAGES_SENSOR, str(len(moments))), {"moments": moments}),),
     )
 
 
@@ -232,3 +247,47 @@ async def test_the_stored_timeline_does_not_grow_across_restarts(
     stored = async_get(hass).last_states[PROVIDER_SENSOR]
     segments = stored.extra_data.as_dict()["segments"]
     assert [moment for moment, _ in segments] == [covering, recent]
+
+
+async def test_the_interruptions_survive_a_restart(
+    hass: HomeAssistant, entry, start
+) -> None:
+    """The count of outages resets on a restart for the same bad reason."""
+    restore_outages(hass, [ago(1), ago(2)])
+    await start(entry, asn=35612)
+    assert hass.states.get(OUTAGES_SENSOR).state == "2"
+
+
+async def test_interruptions_older_than_the_window_do_not_come_back(
+    hass: HomeAssistant, entry, start
+) -> None:
+    """Coming back from a restart is not a reason to widen the last day."""
+    restore_outages(hass, [ago(1), ago(30)])
+    await start(entry, asn=35612)
+    assert hass.states.get(OUTAGES_SENSOR).state == "1"
+
+
+async def test_when_the_line_last_went_down_comes_back_too(
+    hass: HomeAssistant, entry, start
+) -> None:
+    """The count alone does not say when, which is half of what is asked."""
+    moments = [ago(2), ago(1)]
+    restore_outages(hass, moments)
+    await start(entry, asn=35612)
+    attributes = hass.states.get(OUTAGES_SENSOR).attributes
+    assert attributes["last_outage"] == moments[-1]
+    assert attributes["window_hours"] == 24
+
+
+async def test_the_two_counts_are_restored_apart(
+    hass: HomeAssistant, entry, start
+) -> None:
+    """They count different things, so one coming back must not fill the other.
+
+    Sharing one record is exactly what this release stopped doing: an
+    interruption used to land in the count of provider changes.
+    """
+    restore(hass, [ago(1), ago(2)])
+    await start(entry, asn=35612)
+    assert hass.states.get(CHANGES_SENSOR).state == "2"
+    assert hass.states.get(OUTAGES_SENSOR).state == "0"
