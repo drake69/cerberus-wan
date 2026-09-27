@@ -62,8 +62,15 @@ seen from outside is the same evidence.
 
 **It says when it does not know.** `Unknown` is an answer, not an error, and it
 is kept apart from `Disconnected`: one means the traffic gets out through a
-network you have not named, the other means nothing gets out at all. It never
-guesses which line you are on to avoid admitting it cannot tell.
+network you have not named, the other means nothing gets out at all.
+
+There is one case where it does carry the last answer forward: the traffic is
+getting out, but the lookup that names the network has not come back yet. It
+then keeps showing the provider it was on and sets `asn_resolved` to `false`,
+because reporting a change of provider that nobody made is the worse of the two
+lies, and it would happen exactly when a line has just come back. The admission
+moves from the state to the attribute rather than disappearing, and it lasts at
+most a couple of minutes.
 
 **Nothing is lost on a restart.** The change window and the record of who
 carried what are written to disk and picked up again on start. A statistic
