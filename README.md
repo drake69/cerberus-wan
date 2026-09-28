@@ -146,10 +146,24 @@ watching for a failover must not fire.
 | Entity | What it holds |
 |---|---|
 | the provider sensor | the label of the network in use, with the address, the ASN, and `asn_resolved` as attributes |
+| `Public address` | the address the traffic is going out from, as an entity of its own |
 | one share sensor per label | the percentage of the recorded day that provider carried the traffic, with an `active` attribute saying whether it is carrying right now |
 | `Changes in 24 hours` | how many times the **provider** changed in the last 24 hours, as a moving window |
 | `Changes per hour` | the same window divided by its width: the moving average of switchovers per hour |
 | `Outages in 24 hours` | how many times the **line went down** in the last 24 hours, over its own moving window |
+
+`Public address` holds the same address the provider sensor carries as an
+attribute. The attribute stays where it is, because templates already read it,
+and the entity exists for what an attribute cannot do: appear in the history,
+be triggered on by state, and be found by name. It is a diagnostic entity, so
+it sits under the diagnostics of the device rather than on the main card. When
+nothing gets out it reads `unknown` rather than the disconnected label: which
+provider is carrying is the question the provider sensor answers, and an entity
+named after an address holds an address or nothing at all.
+
+It is also the only entity that moves when a line renews its address without
+changing provider. That is not a failover, so the label stands and the count of
+changes stands, and before this entity a renewal left no trace anywhere.
 
 The shares are percentages of what is on the record, not of the wall clock. An
 installation running for two hours can only speak for those two hours, so the
@@ -288,7 +302,7 @@ Rows that cannot be read are skipped, so a typo costs one provider rather than
 a dialog that will not close.
 
 If you would rather read the number off the sensor yourself, it is published
-as an attribute:
+as an attribute, next to the address that `Public address` publishes as a state:
 
 ```
 asn: 35612
