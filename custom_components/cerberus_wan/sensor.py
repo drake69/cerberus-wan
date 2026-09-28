@@ -11,6 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
@@ -105,6 +106,7 @@ async def async_setup_entry(
 
     entities: list[SensorEntity] = [
         ProviderSensor(coordinator, entry),
+        PublicAddressSensor(coordinator, entry),
         ChangeCountSensor(coordinator, entry),
         ChangeRateSensor(coordinator, entry),
         OutageCountSensor(coordinator, entry),
@@ -265,15 +267,15 @@ class ProviderSensor(CerberusEntity, RestoreEntity):
         self.coordinator.async_update_listeners()
 
 
-class StatisticEntity(CerberusEntity):
-    """A number about the changes, published only when it actually moves.
+class PublishedOnChange(CerberusEntity):
+    """An entity that writes its state only when what it reports moves.
 
-    The polling loop runs every fifteen seconds, and the count of the last day
-    is the same number on almost all of them. Writing it anyway would be five
-    thousand state writes a day that say nothing.
+    The polling loop runs every fifteen seconds, and most of what this
+    integration reports is the same on nearly all of them: a count of the last
+    day, a share rounded to a tenth, an address a line can keep for months.
+    Writing them anyway would be some five thousand state writes a day that say
+    nothing, each one kept by the recorder.
     """
-
-    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator: NetworkCoordinator, entry: ConfigEntry) -> None:
         """Remember nothing has been published yet.
@@ -292,7 +294,7 @@ class StatisticEntity(CerberusEntity):
         The state itself, for an entity whose attributes say nothing a reader
         would act upon. An entity whose attributes do carry something acted
         upon overrides this, so a change there is published rather than kept
-        waiting for the number to move.
+        waiting for the state to move.
 
         Returns:
             The value compared against what was last written.
@@ -307,6 +309,52 @@ class StatisticEntity(CerberusEntity):
             return
         self._published = value
         super()._handle_coordinator_update()
+
+
+class PublicAddressSensor(PublishedOnChange):
+    """The public address the traffic is going out from, on its own entity.
+
+    The same address the provider sensor carries as an attribute, which stays
+    where it is: templates already read it, and 0.5.0 has changed enough of the
+    public contract for one release. An entity is what an attribute cannot be,
+    and the reason this one exists: it has a history to plot, a state to
+    trigger on, and a name to search for.
+
+    When nothing gets out the state is unknown, not the disconnected label.
+    Which provider is carrying is a different question and the provider sensor
+    answers it; an entity named after an address has to hold an address or
+    nothing at all, or every template reading it has to learn the vocabulary of
+    this integration.
+    """
+
+    _attr_name = "Public address"
+    _attr_icon = "mdi:ip-network"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: NetworkCoordinator, entry: ConfigEntry) -> None:
+        """Name the entity after what it holds.
+
+        Args:
+            coordinator: the shared polling loop.
+            entry: the config entry this entity belongs to.
+        """
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_public_address"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the address the last lookup answered with.
+
+        Returns:
+            The public address, or None while nothing gets out.
+        """
+        return self.observation.address
+
+
+class StatisticEntity(PublishedOnChange):
+    """A number about the changes, published only when it actually moves."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
 
 class ShareSensor(StatisticEntity):
